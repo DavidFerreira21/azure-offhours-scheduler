@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+local.settings.json
+cmd/function_app/.python_packages/
+cmd/function_app/.pytest_cache/
+cmd/function_app/config/
+cmd/function_app/discovery/
+cmd/function_app/handlers/
+cmd/function_app/persistence/
+cmd/function_app/scheduler/
+cmd/function_app/schedules/

@@ -1,0 +1,583 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "12299518328150167989"
+    }
+  },
+  "parameters": {
+    "resourceGroupName": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource group where the scheduler resources will be deployed."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[deployment().location]",
+      "metadata": {
+        "description": "Azure region for the deployment."
+      }
+    },
+    "functionAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "Function App name (must be globally unique)."
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account name (3-24 lowercase letters/numbers)."
+      }
+    },
+    "logAnalyticsName": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace name."
+      }
+    },
+    "appInsightsName": {
+      "type": "string",
+      "metadata": {
+        "description": "Application Insights name."
+      }
+    },
+    "planName": {
+      "type": "string",
+      "metadata": {
+        "description": "App Service plan name (Dedicated)."
+      }
+    },
+    "useExistingPlan": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "When true, reuse an existing App Service plan with planName."
+      }
+    },
+    "subscriptionIds": {
+      "type": "array",
+      "metadata": {
+        "description": "List of subscription IDs scanned by the scheduler."
+      }
+    },
+    "schedulesFile": {
+      "type": "string",
+      "defaultValue": "schedules/schedules.yaml",
+      "metadata": {
+        "description": "Path to schedules YAML inside the app package."
+      }
+    },
+    "dryRun": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable DRY_RUN mode."
+      }
+    },
+    "defaultTimezone": {
+      "type": "string",
+      "defaultValue": "America/Sao_Paulo",
+      "metadata": {
+        "description": "Default timezone used when resource tag timezone is missing."
+      }
+    },
+    "scheduleTagKey": {
+      "type": "string",
+      "defaultValue": "schedule",
+      "metadata": {
+        "description": "Tag key that contains the schedule name."
+      }
+    },
+    "retainRunning": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "If true, do not stop manually started VMs outside stop window."
+      }
+    },
+    "retainStopped": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "If true, do not start manually stopped VMs inside start window."
+      }
+    },
+    "maxWorkers": {
+      "type": "int",
+      "defaultValue": 5,
+      "metadata": {
+        "description": "Maximum scheduler workers for controlled parallelism."
+      }
+    },
+    "stateTableName": {
+      "type": "string",
+      "defaultValue": "OffHoursSchedulerState",
+      "metadata": {
+        "description": "Azure Table Storage table name used for scheduler state."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('resourceGroupName')]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "schedulerFunctionStack",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "functionAppName": {
+            "value": "[parameters('functionAppName')]"
+          },
+          "storageAccountName": {
+            "value": "[parameters('storageAccountName')]"
+          },
+          "logAnalyticsName": {
+            "value": "[parameters('logAnalyticsName')]"
+          },
+          "appInsightsName": {
+            "value": "[parameters('appInsightsName')]"
+          },
+          "planName": {
+            "value": "[parameters('planName')]"
+          },
+          "useExistingPlan": {
+            "value": "[parameters('useExistingPlan')]"
+          },
+          "subscriptionIds": {
+            "value": "[parameters('subscriptionIds')]"
+          },
+          "schedulesFile": {
+            "value": "[parameters('schedulesFile')]"
+          },
+          "dryRun": {
+            "value": "[parameters('dryRun')]"
+          },
+          "defaultTimezone": {
+            "value": "[parameters('defaultTimezone')]"
+          },
+          "scheduleTagKey": {
+            "value": "[parameters('scheduleTagKey')]"
+          },
+          "retainRunning": {
+            "value": "[parameters('retainRunning')]"
+          },
+          "retainStopped": {
+            "value": "[parameters('retainStopped')]"
+          },
+          "maxWorkers": {
+            "value": "[parameters('maxWorkers')]"
+          },
+          "stateTableName": {
+            "value": "[parameters('stateTableName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "1975807564143754643"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for all resources in this module."
+              }
+            },
+            "functionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Function App name (must be globally unique)."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name (3-24 lowercase letters/numbers)."
+              }
+            },
+            "logAnalyticsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace name."
+              }
+            },
+            "appInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights name."
+              }
+            },
+            "planName": {
+              "type": "string",
+              "metadata": {
+                "description": "App Service plan name (Dedicated)."
+              }
+            },
+            "useExistingPlan": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "When true, reuse an existing App Service plan with planName."
+              }
+            },
+            "subscriptionIds": {
+              "type": "array",
+              "metadata": {
+                "description": "List of subscription IDs scanned by the scheduler."
+              }
+            },
+            "schedulesFile": {
+              "type": "string",
+              "defaultValue": "schedules/schedules.yaml",
+              "metadata": {
+                "description": "Path to schedules YAML inside the app package."
+              }
+            },
+            "dryRun": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Enable DRY_RUN mode."
+              }
+            },
+            "defaultTimezone": {
+              "type": "string",
+              "defaultValue": "America/Sao_Paulo",
+              "metadata": {
+                "description": "Default timezone used when the resource tag timezone is missing."
+              }
+            },
+            "scheduleTagKey": {
+              "type": "string",
+              "defaultValue": "schedule",
+              "metadata": {
+                "description": "Tag key that contains the schedule name."
+              }
+            },
+            "retainRunning": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "If true, do not stop manually started VMs outside the stop window."
+              }
+            },
+            "retainStopped": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "If true, do not start manually stopped VMs inside the start window."
+              }
+            },
+            "maxWorkers": {
+              "type": "int",
+              "defaultValue": 5,
+              "metadata": {
+                "description": "Maximum scheduler workers for controlled parallelism."
+              }
+            },
+            "stateTableName": {
+              "type": "string",
+              "defaultValue": "OffHoursSchedulerState",
+              "metadata": {
+                "description": "Azure Table Storage table name used for scheduler state."
+              }
+            }
+          },
+          "variables": {
+            "serverFarmId": "[if(parameters('useExistingPlan'), resourceId('Microsoft.Web/serverfarms', parameters('planName')), resourceId('Microsoft.Web/serverfarms', parameters('planName')))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "supportsHttpsTrafficOnly": true
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/default/{1}', parameters('storageAccountName'), parameters('stateTableName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2022-10-01",
+              "name": "[parameters('logAnalyticsName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "retentionInDays": 30,
+                "features": {
+                  "searchVersion": 1
+                },
+                "sku": {
+                  "name": "PerGB2018"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('appInsightsName')]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('useExistingPlan'))]",
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2022-09-01",
+              "name": "[parameters('planName')]",
+              "location": "[parameters('location')]",
+              "kind": "functionapp",
+              "sku": {
+                "name": "B1",
+                "tier": "Basic"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2022-09-01",
+              "name": "[parameters('functionAppName')]",
+              "location": "[parameters('location')]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[variables('serverFarmId')]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "linuxFxVersion": "Python|3.12",
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "python"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+                    },
+                    {
+                      "name": "AZURE_SUBSCRIPTION_IDS",
+                      "value": "[join(parameters('subscriptionIds'), ',')]"
+                    },
+                    {
+                      "name": "SCHEDULES_FILE",
+                      "value": "[parameters('schedulesFile')]"
+                    },
+                    {
+                      "name": "DRY_RUN",
+                      "value": "[toLower(string(parameters('dryRun')))]"
+                    },
+                    {
+                      "name": "DEFAULT_TIMEZONE",
+                      "value": "[parameters('defaultTimezone')]"
+                    },
+                    {
+                      "name": "SCHEDULE_TAG_KEY",
+                      "value": "[parameters('scheduleTagKey')]"
+                    },
+                    {
+                      "name": "RETAIN_RUNNING",
+                      "value": "[toLower(string(parameters('retainRunning')))]"
+                    },
+                    {
+                      "name": "RETAIN_STOPPED",
+                      "value": "[toLower(string(parameters('retainStopped')))]"
+                    },
+                    {
+                      "name": "MAX_WORKERS",
+                      "value": "[string(parameters('maxWorkers'))]"
+                    },
+                    {
+                      "name": "STATE_STORAGE_CONNECTION_STRING",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "STATE_STORAGE_TABLE_NAME",
+                      "value": "[parameters('stateTableName')]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]",
+                "[resourceId('Microsoft.Web/serverfarms', parameters('planName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "functionAppName": {
+              "type": "string",
+              "value": "[parameters('functionAppName')]"
+            },
+            "functionAppId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01', 'full').identity.principalId]"
+            },
+            "storageAccountName": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            },
+            "stateTableName": {
+              "type": "string",
+              "value": "[parameters('stateTableName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "subscriptionRoles",
+        "count": "[length(parameters('subscriptionIds'))]"
+      },
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('schedulerRoles-{0}', parameters('subscriptionIds')[copyIndex()])]",
+      "subscriptionId": "[parameters('subscriptionIds')[copyIndex()]]",
+      "location": "[deployment().location]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.principalId.value]"
+          },
+          "assignmentSeed": {
+            "value": "[parameters('functionAppName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "5544756359354056270"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the Function App managed identity."
+              }
+            },
+            "assignmentSeed": {
+              "type": "string",
+              "metadata": {
+                "description": "Stable seed used to generate deterministic role assignment names."
+              }
+            }
+          },
+          "variables": {
+            "readerRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
+            "vmContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().subscriptionId, parameters('assignmentSeed'), 'reader')]",
+              "properties": {
+                "roleDefinitionId": "[variables('readerRoleDefinitionId')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().subscriptionId, parameters('assignmentSeed'), 'vm-contributor')]",
+              "properties": {
+                "roleDefinitionId": "[variables('vmContributorRoleDefinitionId')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "functionAppName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.functionAppName.value]"
+    },
+    "functionAppId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.functionAppId.value]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.principalId.value]"
+    }
+  }
+}

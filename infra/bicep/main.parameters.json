@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceGroupName": {
+      "value": "rg-offhours-scheduler-985524"
+    },
+    "location": {
+      "value": "eastus"
+    },
+    "functionAppName": {
+      "value": "func-offhours-985524-01"
+    },
+    "storageAccountName": {
+      "value": "stoffhours98552401"
+    },
+    "logAnalyticsName": {
+      "value": "log-offhours-985524"
+    },
+    "appInsightsName": {
+      "value": "appi-offhours-985524"
+    },
+    "planName": {
+      "value": "asp-offhours-985524"
+    },
+    "useExistingPlan": {
+      "value": false
+    },
+    "subscriptionIds": {
+      "value": [
+        "fb92cd83-75ed-4643-9d26-8e4dfa985524"
+      ]
+    },
+    "schedulesFile": {
+      "value": "schedules/schedules.yaml"
+    },
+    "dryRun": {
+      "value": false
+    },
+    "defaultTimezone": {
+      "value": "America/Sao_Paulo"
+    },
+    "scheduleTagKey": {
+      "value": "schedule"
+    },
+    "retainRunning": {
+      "value": true
+    },
+    "retainStopped": {
+      "value": false
+    },
+    "maxWorkers": {
+      "value": 5
+    },
+    "stateTableName": {
+      "value": "OffHoursSchedulerState"
+    }
+  }
+}

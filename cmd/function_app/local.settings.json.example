@@ -1,0 +1,17 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AZURE_SUBSCRIPTION_IDS": "<sub-id-1>,<sub-id-2>",
+    "SCHEDULES_FILE": "../../schedules/schedules.yaml",
+    "DRY_RUN": "true",
+    "DEFAULT_TIMEZONE": "America/Sao_Paulo",
+    "SCHEDULE_TAG_KEY": "schedule",
+    "RETAIN_RUNNING": "false",
+    "RETAIN_STOPPED": "false",
+    "MAX_WORKERS": "5",
+    "STATE_STORAGE_CONNECTION_STRING": "UseDevelopmentStorage=true",
+    "STATE_STORAGE_TABLE_NAME": "OffHoursSchedulerState"
+  }
+}

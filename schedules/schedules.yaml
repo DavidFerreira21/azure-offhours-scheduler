@@ -1,0 +1,17 @@
+office-hours:
+  start: "08:00"
+  stop: "23:13"
+
+lab:
+  periods:
+    - start: "09:00"
+      stop: "12:00"
+    - start: "13:00"
+      stop: "18:00"
+
+weekend-off:
+  start: "08:00"
+  stop: "19:00"
+  skip_days:
+    - saturday
+    - sunday
