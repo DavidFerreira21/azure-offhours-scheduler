@@ -2,6 +2,7 @@
 
 Azure OffHours Scheduler e uma ferramenta open source para iniciar e parar recursos Azure com base em horarios definidos por tags.
 O foco principal e reduzir custos em ambientes nao produtivos, como dev, hml, sandbox e labs.
+No estado atual, o scheduler executa acoes reais para Virtual Machines (`Microsoft.Compute/virtualMachines`).
 
 ## Documentacao Detalhada
 
@@ -51,18 +52,19 @@ Principios:
 
 - Configuracao por tags
 - Suporte multi-subscription
-- Arquitetura stateless (v1)
+- Arquitetura com estado opcional (Azure Table Storage)
 - Extensibilidade para novos tipos de recurso
 
 ## Estado Atual (v1)
 
 Implementado no repositorio:
 
-- Azure Function com timer a cada 5 minutos
+- Azure Function com timer a cada 2 minutos (`0 */2 * * * *`)
 - Discovery via Azure Resource Graph
 - Engine de decisao com retorno `START`, `STOP` ou `SKIP`
 - Handler de Virtual Machine (`begin_start` / `begin_deallocate`)
 - Configuracao de schedules em YAML
+- Persistencia opcional de estado para regras `RETAIN_*`
 - Testes unitarios do engine e do scheduler service
 
 ## Estrutura do Projeto
@@ -85,6 +87,8 @@ azure-offhours-scheduler
 │  ├─ base_handler.py
 │  ├─ registry.py
 │  └─ vm_handler.py
+├─ persistence/
+│  └─ state_store.py
 ├─ scheduler/
 │  ├─ engine.py
 │  └─ service.py
@@ -122,7 +126,7 @@ Exemplo:
 ```yaml
 office-hours:
   start: "08:00"
-  stop: "19:00"
+  stop: "23:13"
 
 lab:
   periods:
@@ -188,8 +192,11 @@ Edite `local.settings.json` e preencha:
 - `RETAIN_RUNNING`: habilita regra de manual override com persistencia
 - `RETAIN_STOPPED`: habilita regra para respeitar VM parada manualmente dentro da janela de start
 - `MAX_WORKERS`: concorrencia maxima do worker pool (padrao `5`)
-- `STATE_STORAGE_CONNECTION_STRING`: conexao do Azure Table Storage de estado
+- `STATE_STORAGE_CONNECTION_STRING`: conexao do Azure Table Storage de estado (fallback para `AzureWebJobsStorage` se vazio)
 - `STATE_STORAGE_TABLE_NAME`: nome da tabela de estado (padrao `OffHoursSchedulerState`)
+
+Observacao importante:
+- se `RETAIN_RUNNING=true` ou `RETAIN_STOPPED=true` e `STATE_STORAGE_CONNECTION_STRING` nao estiver definido, o scheduler continua funcionando, mas sem persistencia real (NoopStateStore).
 
 ### 4. Instalar Azure Functions Core Tools (se necessario)
 

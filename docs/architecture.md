@@ -32,7 +32,7 @@ Responsabilidades:
 
 Trigger:
 - `cmd/function_app/OffHoursTimer/function.json`
-- cron atual: `0 */5 * * * *` (a cada 5 minutos)
+- cron atual: `0 */2 * * * *` (a cada 2 minutos)
 
 Observacao:
 - `useMonitor: false` esta habilitado para simplificar teste local.
@@ -112,7 +112,7 @@ Regras operacionais importantes:
 Persistencia de estado:
 - arquivo: `persistence/state_store.py`
 - backend: Azure Table Storage
-- campo principal de decisao: `StartedByScheduler`
+- fallback para `NoopStateStore` quando persistencia nao esta habilitada
 
 ## 7. Camada: Handlers
 
@@ -176,7 +176,7 @@ Exemplo:
 ```yaml
 office-hours:
   start: "08:00"
-  stop: "19:00"
+  stop: "23:13"
 
 lab:
   periods:
@@ -201,7 +201,7 @@ Uso por tag no recurso:
 Fonte:
 - `cmd/function_app/local.settings.json`
 
-### 9.1 Parametros de ambiente
+### 10.1 Parametros de ambiente
 
 - `AzureWebJobsStorage`
   - storage da Function Runtime
@@ -251,7 +251,7 @@ Fonte:
   - inteiro > 0
   - define concorrencia maxima do worker pool (padrao: `5`)
 
-### 9.2 Parametros de schedule (YAML)
+### 10.2 Parametros de schedule (YAML)
 
 Por schedule:
 - `start` / `stop` (formato simples)
