@@ -335,6 +335,22 @@ Execucao:
 - v3: regras avancadas (feriados, datas especificas, janelas complexas)
 - v4: features FinOps (detecao de ociosidade, relatorios de custo)
 
+## Alteracoes Futuras (Planejado)
+
+Itens alinhados para implementacao futura:
+
+- Migrar configuracao operacional para Azure Table Storage (table-driven), removendo dependencia de arquivo YAML para schedules.
+- Manter no app apenas configuracoes tecnicas/minimas de runtime (ex.: conexoes e nomes de tabelas).
+- Permitir administracao de schedules diretamente por tabela, incluindo criacao e alteracao de janelas sem redeploy.
+- Centralizar configuracoes globais na tabela (ex.: `DRY_RUN`, `DEFAULT_TIMEZONE`, `SCHEDULE_TAG_KEY`, `RETAIN_RUNNING`, `RETAIN_STOPPED`).
+- Incluir controle de escopo dinamico por include/exclude:
+  - `include_management_groups`
+  - `include_subscriptions`
+  - `exclude_management_groups`
+  - `exclude_subscriptions`
+- Definir regra explicita de precedencia para escopo (excludes vencem includes).
+- Incluir validacao/auditoria das configuracoes (ex.: `Version`, `UpdatedAtUtc`, `UpdatedBy`) para seguranca operacional.
+
 ## Licenca
 
 MIT
