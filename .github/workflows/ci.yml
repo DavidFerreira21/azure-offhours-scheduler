@@ -40,11 +40,12 @@ jobs:
       - name: Prepare function publish bundle
         run: ./scripts/prepare_function_app_publish.sh
 
-      - name: Setup Bicep
-        uses: Azure/setup-bicep@v2
-
       - name: Validate Bicep compilation
-        run: bicep build --file infra/bicep/main.bicep
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az bicep install
+            az bicep build --file infra/bicep/main.bicep
 
       - name: Validate JSON examples
         run: |
