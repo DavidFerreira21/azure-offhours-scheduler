@@ -38,7 +38,7 @@ jobs:
           bash -n scripts/prepare_function_app_publish.sh
 
       - name: Prepare function publish bundle
-        run: ./scripts/prepare_function_app_publish.sh
+        run: bash ./scripts/prepare_function_app_publish.sh
 
       - name: Validate Bicep compilation
         uses: azure/cli@v2
