@@ -3,11 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
-import yaml
+from scheduler.models import ScheduleDefinition
 
 
 class Decision(str, Enum):
@@ -23,38 +21,28 @@ class EvaluationResult:
 
 
 class ScheduleEngine:
-    def __init__(self, schedules_file: str, schedule_tag_key: str = "schedule") -> None:
-        self.schedules_file = schedules_file
+    def __init__(self, schedules: dict[str, ScheduleDefinition], schedule_tag_key: str = "schedule") -> None:
+        self.schedules = schedules
         self.schedule_tag_key = schedule_tag_key
-        self._schedules = self._load_schedules(schedules_file)
-
-    @staticmethod
-    def _load_schedules(path: str) -> dict[str, Any]:
-        file_path = Path(path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"Schedule file not found: {path}")
-
-        with file_path.open("r", encoding="utf-8") as file:
-            data = yaml.safe_load(file) or {}
-
-        if not isinstance(data, dict):
-            raise ValueError("Schedules file must define a mapping of schedule names.")
-
-        return data
 
     def evaluate(
         self,
         tags: dict[str, str],
         now_utc: datetime | None = None,
         default_timezone: str = "UTC",
+        subscription_id: str = "",
+        management_group_ids: list[str] | tuple[str, ...] | None = None,
     ) -> EvaluationResult:
         schedule_name = (tags or {}).get(self.schedule_tag_key)
         if not schedule_name:
             return EvaluationResult(Decision.SKIP, f"resource has no '{self.schedule_tag_key}' tag")
 
-        schedule = self._schedules.get(schedule_name)
+        schedule = self.schedules.get(schedule_name)
         if not schedule:
             return EvaluationResult(Decision.SKIP, f"schedule '{schedule_name}' not found")
+
+        if not schedule.scope.matches(subscription_id=subscription_id, management_group_ids=management_group_ids):
+            return EvaluationResult(Decision.SKIP, f"resource is outside schedule '{schedule_name}' scope")
 
         timezone_name = (tags or {}).get("timezone") or default_timezone
         try:
@@ -66,31 +54,18 @@ class ScheduleEngine:
         now_local = current_utc.astimezone(timezone)
         weekday_name = now_local.strftime("%A").lower()
 
-        skip_days = {day.lower() for day in schedule.get("skip_days", [])}
+        skip_days = set(schedule.skip_days)
         if weekday_name in skip_days:
             return EvaluationResult(Decision.SKIP, f"weekday '{weekday_name}' configured as skip")
 
         current_minute = now_local.hour * 60 + now_local.minute
-        periods = self._extract_periods(schedule)
-
-        for period in periods:
-            start_minute = self._hhmm_to_minutes(period.get("start"))
-            stop_minute = self._hhmm_to_minutes(period.get("stop"))
+        for period in schedule.periods:
+            start_minute = self._hhmm_to_minutes(period.start)
+            stop_minute = self._hhmm_to_minutes(period.stop)
             if start_minute <= current_minute < stop_minute:
                 return EvaluationResult(Decision.START, "current time is within schedule period")
 
         return EvaluationResult(Decision.STOP, "current time is outside schedule periods")
-
-    @staticmethod
-    def _extract_periods(schedule: dict[str, Any]) -> list[dict[str, str]]:
-        configured_periods = schedule.get("periods")
-        if configured_periods is not None:
-            if not isinstance(configured_periods, list) or not configured_periods:
-                raise ValueError("Schedule 'periods' must be a non-empty list")
-            return configured_periods
-
-        # Backward-compatible format.
-        return [{"start": schedule.get("start"), "stop": schedule.get("stop")}]
 
     @staticmethod
     def _hhmm_to_minutes(value: str | None) -> int:

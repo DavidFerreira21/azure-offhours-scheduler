@@ -1,287 +1,599 @@
-# Documentacao Tecnica Detalhada
+# Arquitetura
 
-## 1. Objetivo
+## Objetivo
 
-O Azure OffHours Scheduler automatiza start/stop de recursos Azure com base em tags e horarios definidos em YAML.
+O Azure OffHours Scheduler automatiza `start` e `stop` de recursos Azure com base em tags e janelas operacionais definidas em Azure Table Storage.
 
-No estado atual, o foco de execucao real e VM (`Microsoft.Compute/virtualMachines`).
+O objetivo do desenho atual e permitir:
 
-## 2. Visao por Camadas
+- configuracao operacional sem redeploy
+- escopo dinamico por subscription e management group
+- retencao de override manual
+- auditoria minima de mudancas
+
+## Visao Geral
+
+Fluxo fim a fim:
 
 ```text
-Azure Function (Timer)
-  -> Scheduler Service (orquestracao)
-    -> Discovery (Resource Graph)
-    -> Schedule Engine (decisao START/STOP/SKIP)
-    -> Worker Pool (ThreadPoolExecutor)
-    -> Handler Registry
-      -> VM Handler (acao Azure Compute)
-    -> State Store (Azure Table Storage)
+Bicep deploya infraestrutura
+    ->
+Function App recebe configuracao tecnica de runtime
+    ->
+Timer Trigger dispara o ciclo
+    ->
+App le configuracao global na tabela Config
+    ->
+App le schedules ativos na tabela Schedules
+    ->
+Discovery consulta Resource Graph nas subscriptions tecnicas
+    ->
+Scheduler avalia cada recurso contra schedule + timezone + escopo
+    ->
+Service decide START / STOP / SKIP
+    ->
+Handler executa acao real no recurso
+    ->
+Tabela State registra o historico operacional
+    ->
+Logs consolidam o resultado do ciclo
 ```
 
-## 3. Camada: Function
+## Componentes
 
-Arquivo principal:
-- `cmd/function_app/OffHoursTimer/__init__.py`
+### 1. Infraestrutura
 
-Responsabilidades:
-- carregar configuracoes de ambiente (`Settings.from_env`)
-- instanciar engine, discovery, handlers e scheduler service
-- disparar o ciclo (`service.run()`)
-- registrar resumo da execucao em log
+Provisionada por Bicep:
 
-Trigger:
-- `cmd/function_app/OffHoursTimer/function.json`
-- cron atual: `0 */2 * * * *` (a cada 2 minutos)
+- Storage Account
+- 3 tabelas Azure Table Storage
+- Function App com Managed Identity
+- App Service Plan
+- Log Analytics
+- Application Insights
+- Role assignments nas subscriptions monitoradas
 
-Observacao:
-- `useMonitor: false` esta habilitado para simplificar teste local.
+Arquivos principais:
 
-## 4. Camada: Discovery
+- `infra/bicep/main.bicep`
+- `infra/bicep/modules/functionApp.bicep`
+- `infra/bicep/modules/subscriptionRoles.bicep`
 
-Arquivo:
-- `discovery/resource_graph.py`
+### 2. Runtime Settings
 
-Responsabilidades:
-- consultar Azure Resource Graph
-- filtrar apenas `microsoft.compute/virtualmachines` (escopo v1)
-- filtrar recursos com a tag de schedule configurada
-- retornar lista normalizada de `ScheduledResource`
+O ambiente da Function guarda apenas configuracao tecnica:
 
-Campos retornados por recurso:
+- `AZURE_SUBSCRIPTION_IDS`
+- `TARGET_RESOURCE_LOCATIONS`
+- `DECLARED_MANAGEMENT_GROUP_IDS`
+- `DECLARED_EXCLUDE_SUBSCRIPTION_IDS`
+- `SCHEDULER_STORAGE_CONNECTION_STRING` ou `AzureWebJobsStorage`
+- `CONFIG_STORAGE_TABLE_NAME`
+- `SCHEDULE_STORAGE_TABLE_NAME`
+- `STATE_STORAGE_TABLE_NAME`
+- `MAX_WORKERS`
+
+Esses valores dizem onde executar e onde buscar a configuracao operacional. Eles nao definem regras de negocio.
+
+Leitura pratica:
+
+- `AZURE_SUBSCRIPTION_IDS`: escopo tecnico efetivo ja resolvido pelo wrapper de deploy
+- `DECLARED_MANAGEMENT_GROUP_IDS` e `DECLARED_EXCLUDE_SUBSCRIPTION_IDS`: metadados do escopo originalmente informado no `main.parameters.json`
+
+### 3. Tabelas Operacionais
+
+O comportamento do scheduler vem de 3 tabelas:
+
+- `OffHoursSchedulerConfig`
+- `OffHoursSchedulerSchedules`
+- `OffHoursSchedulerState`
+
+## Fluxo Completo
+
+### Etapa 1. Deploy
+
+O Bicep cria a storage account, as tabelas e a Function App.
+
+No fluxo padrao de deploy, os inputs principais sao:
+
+- `resourceGroupName`
+- `location`
+- `namePrefix`
+- `subscriptionIds`
+- `managementGroupIds`
+- `excludeSubscriptionIds`
+- `targetResourceLocations`
+
+Input opcional recomendado para operacao do time:
+
+- `tableOperatorsGroupObjectId`
+
+Com isso, o template gera automaticamente os nomes de:
+
+- Function App
+- Storage Account
+- Log Analytics
+- Application Insights
+- App Service Plan
+
+As tabelas usam os nomes default do template, sem necessidade de informar no `parameters`.
+
+Quando `tableOperatorsGroupObjectId` e informado, o template tambem atribui `Storage Table Data Contributor` na Storage Account para esse grupo Microsoft Entra.
+
+Uso de `targetResourceLocations`:
+
+- vazio: o scheduler considera todas as regioes das subscriptions monitoradas
+- preenchido: o scheduler filtra os recursos do discovery para as regioes informadas
+
+Uso do escopo tecnico da solucao:
+
+- `subscriptionIds`: subscriptions explicitamente monitoradas
+- `managementGroupIds`: management groups usados para descobrir subscriptions adicionais
+- `excludeSubscriptionIds`: subscriptions removidas do escopo final
+
+O wrapper de deploy resolve o escopo efetivo assim:
+
+- `subscriptionIds` + subscriptions descendentes de `managementGroupIds` - `excludeSubscriptionIds`
+
+Modelos de uso:
+
+- explicito: apenas `subscriptionIds`
+- enterprise: `managementGroupIds` com exclusoes pontuais em `excludeSubscriptionIds`
+- misto: uniao de subscriptions explicitas com subscriptions herdadas dos management groups
+
+Para primeira carga operacional, o repositorio tambem disponibiliza um bootstrap padrao via:
+
+```bash
+./scripts/bootstrap_scheduler_tables.sh --resource-group <rg> --storage-account <account>
+```
+
+O bootstrap cria uma configuracao global segura em `DRY_RUN=true` e um schedule `business-hours` (`08:00-18:00`, segunda a sexta) apenas se essas entidades ainda nao existirem.
+
+Na operacao recomendada do repositorio, esse bootstrap e chamado automaticamente por:
+
+```bash
+./scripts/deploy_scheduler.sh --parameters-file infra/bicep/main.parameters.json
+```
+
+Esse wrapper executa um preflight antes do deploy:
+
+- valida ferramentas locais obrigatorias
+- confirma autenticacao ativa no Azure CLI
+- resolve o escopo final da solucao a partir de subscriptions e management groups
+- valida acesso as subscriptions efetivas do escopo resolvido
+- executa `az deployment sub validate` antes do create
+
+Depois disso, ele executa o deploy da infra, aplica o bootstrap das tabelas e publica a Function App no final.
+
+Observacao importante:
+
+- quando o escopo usa `managementGroupIds` ou `excludeSubscriptionIds`, o caminho recomendado e o wrapper `scripts/deploy_scheduler.sh`
+- um `az deployment sub create` direto nao resolve automaticamente subscriptions descendentes de management groups
+
+A identidade gerenciada da Function recebe:
+
+- `Reader`
+- `Virtual Machine Contributor`
+
+Esses papeis sao atribuidos em cada subscription do escopo tecnico efetivo resolvido pelo deploy.
+
+### Etapa 2. Disparo do timer
+
+A Function `OffHoursTimer` executa no cron configurado em `function/OffHoursTimer/function.json`.
+
+Cada disparo representa um ciclo completo de avaliacao.
+
+### Etapa 3. Bootstrap do runtime
+
+No inicio do ciclo:
+
+1. `Settings.from_env()` carrega a configuracao tecnica.
+2. O app conecta na tabela global.
+3. O app conecta na tabela de schedules.
+4. Se retencao estiver habilitada, o app prepara a tabela de state.
+
+Nesse ponto o runtime ainda nao consultou nenhum recurso Azure. Ele apenas montou o contexto operacional.
+
+### Etapa 4. Leitura da configuracao global
+
+A tabela `Config` define o comportamento do ciclo atual.
+
+Entidade esperada:
+
+```text
+PartitionKey=GLOBAL
+RowKey=runtime
+```
+
+Campos obrigatorios:
+
+- `DRY_RUN`
+- `DEFAULT_TIMEZONE`
+- `SCHEDULE_TAG_KEY`
+- `RETAIN_RUNNING`
+- `RETAIN_STOPPED`
+- `Version`
+- `UpdatedAtUtc`
+- `UpdatedBy`
+
+Significado:
+
+- `DRY_RUN`: calcula e loga, sem executar `start/stop`
+- `DEFAULT_TIMEZONE`: fallback quando o recurso nao tem tag `timezone`
+- `SCHEDULE_TAG_KEY`: nome da tag que aponta para o schedule
+- `RETAIN_RUNNING`: preserva recurso ligado manualmente fora da janela
+- `RETAIN_STOPPED`: preserva recurso parado manualmente dentro da janela
+- `Version`, `UpdatedAtUtc`, `UpdatedBy`: trilha minima de auditoria
+
+Exemplo:
+
+```json
+{
+  "PartitionKey": "GLOBAL",
+  "RowKey": "runtime",
+  "DRY_RUN": true,
+  "DEFAULT_TIMEZONE": "America/Sao_Paulo",
+  "SCHEDULE_TAG_KEY": "schedule",
+  "RETAIN_RUNNING": true,
+  "RETAIN_STOPPED": false,
+  "Version": "1",
+  "UpdatedAtUtc": "2026-03-17T12:00:00Z",
+  "UpdatedBy": "ops@example.com"
+}
+```
+
+### Etapa 5. Leitura dos schedules
+
+A tabela `Schedules` contem uma entidade por schedule.
+
+O `RowKey` e o nome usado na tag do recurso, por exemplo:
+
+```text
+schedule=office-hours
+```
+
+Campos suportados:
+
+- `Start`
+- `Stop`
+- `Periods`
+- `SkipDays`
+- `IncludeManagementGroups`
+- `IncludeSubscriptions`
+- `ExcludeManagementGroups`
+- `ExcludeSubscriptions`
+- `Enabled`
+- `Version`
+- `UpdatedAtUtc`
+- `UpdatedBy`
+
+Regras de interpretacao:
+
+- `Periods` permite multiplas janelas no mesmo schedule
+- `Start/Stop` continua valendo para janelas simples
+- `Enabled=false` remove o schedule do ciclo sem apagar a entidade
+- `SkipDays` ignora o schedule em dias especificos
+
+Exemplo:
+
+```json
+{
+  "PartitionKey": "SCHEDULE",
+  "RowKey": "office-hours",
+  "Periods": "[{\"start\":\"08:00\",\"stop\":\"12:00\"},{\"start\":\"13:00\",\"stop\":\"18:00\"}]",
+  "SkipDays": "saturday,sunday",
+  "IncludeSubscriptions": "sub-a,sub-b",
+  "ExcludeManagementGroups": "[\"mg-sandbox-blocked\"]",
+  "Enabled": true,
+  "Version": "4",
+  "UpdatedAtUtc": "2026-03-17T12:15:00Z",
+  "UpdatedBy": "ops@example.com"
+}
+```
+
+### Etapa 6. Discovery dos recursos
+
+O discovery usa Azure Resource Graph para buscar recursos:
+
+- dentro das subscriptions listadas em `AZURE_SUBSCRIPTION_IDS`
+- opcionalmente filtrados por `TARGET_RESOURCE_LOCATIONS`
+- do tipo atualmente suportado
+- que possuam a tag definida por `SCHEDULE_TAG_KEY`
+
+Para cada recurso, o scheduler coleta:
+
 - `id`
 - `name`
 - `type`
-- `subscription_id`
-- `resource_group`
+- `location`
+- `subscriptionId`
+- `resourceGroup`
 - `tags`
+- `managementGroupAncestorsChain`
 
-Tag de schedule dinamica:
-- controlada por `SCHEDULE_TAG_KEY`
-- a query usa `tags['<chave>']`
+O filtro do Resource Graph e tecnico. A validacao de regra operacional acontece depois.
 
-## 5. Camada: Engine
+Em execucao local, o app usa `AZURE_SUBSCRIPTION_IDS` diretamente. A resolucao de `managementGroupIds` e `excludeSubscriptionIds` e uma responsabilidade do wrapper de deploy.
 
-Arquivo:
-- `scheduler/engine.py`
+### Etapa 7. Avaliacao do recurso
 
-Responsabilidades:
-- ler `schedules.yaml`
-- interpretar tag de schedule no recurso
-- aplicar timezone (tag `timezone` ou `DEFAULT_TIMEZONE`)
-- aplicar regras de skip por dia
-- retornar decisao:
-  - `START`
-  - `STOP`
-  - `SKIP`
+Cada recurso passa pelo `ScheduleEngine`.
 
-Regras de formato de schedule:
-- formato simples (retrocompativel):
-  - `start` + `stop`
-- formato avancado:
-  - `periods` com uma ou mais janelas `start/stop`
+Ordem da avaliacao:
 
-Se qualquer periodo casar com a hora atual local do recurso, a decisao e `START`.
+1. Ler o nome do schedule na tag do recurso.
+2. Verificar se o schedule existe na tabela.
+3. Verificar se o recurso esta dentro do escopo do schedule.
+4. Resolver timezone do recurso:
+   `tag timezone` -> `DEFAULT_TIMEZONE`.
+5. Verificar se o dia atual esta em `SkipDays`.
+6. Verificar se o horario atual cai em alguma janela.
+7. Retornar `START`, `STOP` ou `SKIP`.
 
-## 6. Camada: Scheduler Service
+Saidas possiveis:
 
-Arquivo:
-- `scheduler/service.py`
+- `START`: recurso deveria estar ligado agora
+- `STOP`: recurso deveria estar desligado agora
+- `SKIP`: nao agir por falta de tag, schedule inexistente, escopo invalido, dia ignorado ou timezone invalido
 
-Responsabilidades:
-- orquestrar o ciclo fim-a-fim
-- aplicar decisao do engine em cada recurso descoberto
-- aplicar modo `DRY_RUN`
-- processar recursos em paralelo com concorrencia controlada
-- contabilizar resumo (`total`, `started`, `stopped`, `skipped`)
+### Etapa 8. Escopo dinamico
 
-Regras operacionais importantes:
-- sem handler para tipo de recurso -> `SKIP`
-- `DRY_RUN=true` -> nao executa chamadas reais
-- `MAX_WORKERS` controla o numero maximo de workers simultaneos
-- checagem de estado antes da acao (via handler):
-  - decisao `START` + estado `running` -> `SKIP`
-  - decisao `STOP` + estado `stopped` -> `SKIP`
-- `RETAIN_RUNNING=true` com persistencia:
-  - fora da janela, se VM estiver `running` e foi ligada manualmente -> `SKIP`
-  - fora da janela, se VM estiver `running` e foi ligada pelo scheduler -> `STOP`
-- `RETAIN_STOPPED=true` com persistencia:
-  - dentro da janela, se VM estiver `stopped` e foi parada manualmente -> `SKIP`
-  - dentro da janela, se VM estiver `stopped` e foi parada pelo scheduler -> `START`
+Cada schedule pode restringir alcance usando:
 
-Persistencia de estado:
-- arquivo: `persistence/state_store.py`
-- backend: Azure Table Storage
-- fallback para `NoopStateStore` quando persistencia nao esta habilitada
+- `IncludeManagementGroups`
+- `IncludeSubscriptions`
+- `ExcludeManagementGroups`
+- `ExcludeSubscriptions`
 
-## 7. Camada: Handlers
+Regra de precedencia:
 
-Arquivos:
-- `handlers/base_handler.py`
-- `handlers/registry.py`
-- `handlers/vm_handler.py`
+- `exclude` sempre vence `include`
 
-### 7.1 Base Handler
+Leitura pratica:
 
-Contrato minimo por recurso:
-- `get_state(resource) -> str`
-- `start(resource) -> None`
-- `stop(resource) -> None`
+- sem `include`, o schedule vale para todo o universo tecnico efetivo carregado em `AZURE_SUBSCRIPTION_IDS`
+- com `include`, o recurso so entra se bater em pelo menos um include
+- se bater em qualquer `exclude`, o recurso sai mesmo que tambem esteja em `include`
 
-### 7.2 Registry
+Exemplo mental:
 
-Mapeia `resource_type` (lowercase) para handler concreto.
+```text
+IncludeSubscriptions = sub-a
+ExcludeManagementGroups = mg-blocked
+```
 
-### 7.3 VM Handler
+Resultado:
 
-Suporta:
-- `microsoft.compute/virtualmachines`
+- recurso em `sub-a` e fora de `mg-blocked` -> entra
+- recurso em `sub-a` e dentro de `mg-blocked` -> fica fora
+- recurso fora de `sub-a` -> fica fora
 
-Implementa:
-- `get_state`: consulta `instance_view` e normaliza para:
-  - `running`
-  - `stopped`
-  - `unknown`
-- `start`: `begin_start(...).result()`
-- `stop`: `begin_deallocate(...).result()`
+### Etapa 9. Execucao da acao
 
-## 8. Camada: State Store
+Depois da decisao:
 
-Arquivo:
-- `persistence/state_store.py`
+- se nao houver handler para o tipo, o recurso vira `SKIP`
+- se `DRY_RUN=true`, a acao e apenas logada
+- se `DRY_RUN=false`, o handler consulta o estado atual e executa `start/stop` quando necessario
 
-Implementacoes:
-- `NoopStateStore` (fallback)
-- `AzureTableStateStore` (persistencia real)
+No estado atual, o handler implementado e para:
 
-Dados persistidos por VM:
+- `Microsoft.Compute/virtualMachines`
+
+### Etapa 10. Retencao e state
+
+A tabela `State` protege overrides manuais.
+
+Campos gravados por recurso:
+
 - `ResourceId`
+- `ResourceGroup`
+- `ResourceName`
+- `ResourceType`
 - `StartedByScheduler`
 - `StoppedByScheduler`
 - `LastObservedState`
 - `LastAction`
 - `UpdatedAtUtc`
 
-Chaves da tabela:
-- `PartitionKey = subscription_id`
-- `RowKey = sha1(resource_id)`
+Comportamentos:
 
-## 9. Schedules
+- se a decisao for `START` e a VM ja estiver `running`, o resultado e `SKIP_ALREADY_RUNNING`
+- se a decisao for `STOP` e a VM ja estiver `stopped`, o resultado e `SKIP_ALREADY_STOPPED`
+- se `RETAIN_RUNNING=true` e a VM estiver ligada fora da janela sem ter sido ligada pelo scheduler, o resultado e `SKIP_RETAIN_RUNNING`
+- se `RETAIN_STOPPED=true` e a VM estiver parada dentro da janela sem ter sido parada pelo scheduler, o resultado e `SKIP_RETAIN_STOPPED`
 
-Arquivo:
-- `schedules/schedules.yaml`
+Isso evita que o scheduler desfaça uma decisao manual indevidamente.
 
-Exemplo:
+### Etapa 11. Concorrencia
 
-```yaml
-office-hours:
-  start: "08:00"
-  stop: "23:13"
+Os recursos encontrados sao processados em paralelo via `ThreadPoolExecutor`.
 
-lab:
-  periods:
-    - start: "09:00"
-      stop: "12:00"
-    - start: "13:00"
-      stop: "18:00"
-
-weekend-off:
-  start: "08:00"
-  stop: "19:00"
-  skip_days:
-    - saturday
-    - sunday
-```
-
-Uso por tag no recurso:
-- `schedule=office-hours` (ou outra chave definida em `SCHEDULE_TAG_KEY`)
-
-## 10. Configuracoes Alteraveis
-
-Fonte:
-- `cmd/function_app/local.settings.json`
-
-### 10.1 Parametros de ambiente
-
-- `AzureWebJobsStorage`
-  - storage da Function Runtime
-  - local: normalmente `UseDevelopmentStorage=true` (requer Azurite)
-
-- `FUNCTIONS_WORKER_RUNTIME`
-  - runtime da Function
-  - valor esperado: `python`
-
-- `AZURE_SUBSCRIPTION_IDS`
-  - lista de subscriptions alvo, separadas por virgula
-  - ex.: `sub1,sub2`
-
-- `SCHEDULES_FILE`
-  - caminho do YAML de schedules
-  - ex. atual: `../../schedules/schedules.yaml`
-
-- `DRY_RUN`
-  - `true|false`
-  - `true`: nao executa start/stop real
-
-- `DEFAULT_TIMEZONE`
-  - timezone padrao quando tag `timezone` nao existe
-  - ex.: `America/Sao_Paulo`
-
-- `SCHEDULE_TAG_KEY`
-  - nome da tag de schedule nos recursos
-  - padrao: `schedule`
-
-- `RETAIN_RUNNING`
-  - `true|false`
-  - habilita regra de manual override com historico persistido
-
-- `RETAIN_STOPPED`
-  - `true|false`
-  - habilita regra para manter VM parada manualmente mesmo dentro da janela de start
-
-- `STATE_STORAGE_CONNECTION_STRING`
-  - connection string do Azure Table Storage de estado
-  - se vazio, usa fallback `AzureWebJobsStorage`
-
-- `STATE_STORAGE_TABLE_NAME`
-  - nome da tabela de persistencia
-  - padrao: `OffHoursSchedulerState`
+A concorrencia maxima e definida por:
 
 - `MAX_WORKERS`
-  - inteiro > 0
-  - define concorrencia maxima do worker pool (padrao: `5`)
 
-### 10.2 Parametros de schedule (YAML)
+O limite aplicado em runtime e:
 
-Por schedule:
-- `start` / `stop` (formato simples)
-- `periods` (formato avancado)
-- `skip_days` (opcional)
+- `min(MAX_WORKERS, quantidade_de_recursos_encontrados)`
 
-Regras:
-- `start/stop` em `HH:MM`
-- `periods` deve ser lista nao vazia
-- `skip_days` deve usar nomes de dia em ingles minusculo (`saturday`, `sunday`, ...)
+### Etapa 12. Log e consolidacao
 
-## 11. Fluxo de Execucao (passo a passo)
+Ao final do ciclo, a Function publica um resumo com:
 
-1. Timer dispara a Function.
-2. Function carrega settings.
-3. Discovery consulta Resource Graph por recursos com tag de schedule.
-4. Para cada recurso, engine avalia horario e retorna decisao.
-5. Scheduler valida handler e modo (`DRY_RUN`/real).
-6. Em execucao real, scheduler consulta estado atual via handler.
-7. Scheduler consulta/salva estado historico no state store.
-8. Scheduler aplica regras de skip/start/stop.
-9. Scheduler gera resumo e Function registra log final.
+- total de recursos avaliados
+- quantos iniciaram
+- quantos pararam
+- quantos foram ignorados
+- modo `dry_run`
+- timezone padrao
+- tag key usada
+- flags de retencao
 
-## 12. Limites Atuais
+## Modelo das Tabelas
 
-- Sem regra especifica de `stop_new_instances`
-- Foco operacional atual em VM
+### Config
 
-## 13. Proximos Passos Naturais
+Uso:
 
-- expandir handlers (App Service, SQL, VMSS)
-- validar sobreposicao de periodos no carregamento de schedules
-- adicionar metricas estruturadas por schedule/resource
+- 1 entidade global por ambiente
+
+Chave:
+
+```text
+PartitionKey=GLOBAL
+RowKey=runtime
+```
+
+### Schedules
+
+Uso:
+
+- 1 entidade por schedule
+
+Chave recomendada:
+
+```text
+PartitionKey=SCHEDULE
+RowKey=<nome-do-schedule>
+```
+
+### State
+
+Uso:
+
+- 1 entidade por recurso processado
+
+Chave:
+
+- `PartitionKey = subscription_id`
+- `RowKey = sha1(resource.id)`
+
+## Validacao e Auditoria
+
+O app falha rapido ao carregar configuracao quando:
+
+- a entidade global nao existe
+- `Version` nao existe
+- `UpdatedAtUtc` nao existe ou nao esta em ISO-8601
+- `UpdatedBy` nao existe
+- um schedule nao define `Start/Stop` nem `Periods`
+- `Enabled`, `DRY_RUN` ou `RETAIN_*` nao sao booleans validos
+
+Isso evita ciclo rodando com configuracao ambigua ou parcialmente corrompida.
+
+## Permissoes
+
+### Permissoes da identidade da Function
+
+Hoje o deploy atribui:
+
+- `Reader`
+- `Virtual Machine Contributor`
+
+Essas permissoes cobrem:
+
+- leitura de recursos monitorados
+- discovery via Resource Graph
+- operacoes de `start/deallocate` em VMs
+
+### Permissoes para operadores humanos
+
+Para evitar erro de acesso ao abrir entidades das tabelas pelo Portal com Microsoft Entra ID, o deploy aceita um grupo Entra opcional:
+
+- `tableOperatorsGroupObjectId`
+
+Se informado, o template cria na Storage Account a role:
+
+- `Storage Table Data Contributor`
+
+Escopo:
+
+- Storage Account do scheduler
+
+Uso recomendado:
+
+- criar um grupo como `azure-offhours-operators`
+- adicionar as pessoas do time nesse grupo
+- informar o `objectId` do grupo no deploy
+
+### Acesso as tabelas
+
+No desenho atual, a Function acessa as tabelas por `connection string` da storage account.
+
+Implicacao:
+
+- o acesso a Table Storage nao depende de RBAC da managed identity
+- a identidade precisa de RBAC apenas para consultar e operar recursos Azure
+
+Observacao:
+
+- se o projeto migrar no futuro para acesso por managed identity na storage, sera necessario RBAC de dados na Storage Account
+
+## Como a solucao muda sem redeploy
+
+A vantagem principal do modelo table-driven e separar codigo de operacao.
+
+Mudancas sem publicar novamente a Function:
+
+- alterar `DRY_RUN`
+- trocar `DEFAULT_TIMEZONE`
+- trocar `SCHEDULE_TAG_KEY`
+- habilitar ou desabilitar `RETAIN_RUNNING`
+- habilitar ou desabilitar `RETAIN_STOPPED`
+- criar um novo schedule
+- alterar janelas de horario
+- alterar escopo por subscriptions ou management groups
+- desabilitar um schedule com `Enabled=false`
+
+O proximo ciclo do timer ja passa a usar os novos valores.
+
+## Exemplo Completo
+
+Suponha:
+
+- tabela global com `DRY_RUN=false`
+- `DEFAULT_TIMEZONE=America/Sao_Paulo`
+- `SCHEDULE_TAG_KEY=schedule`
+- schedule `office-hours` ativo
+- VM com tags:
+
+```text
+schedule=office-hours
+timezone=America/Sao_Paulo
+```
+
+E schedule:
+
+```text
+08:00-12:00
+13:00-18:00
+```
+
+Se o ciclo rodar as `09:30`:
+
+1. discovery encontra a VM
+2. engine identifica o schedule `office-hours`
+3. engine valida escopo
+4. engine converte horario para `America/Sao_Paulo`
+5. engine conclui `START`
+6. service verifica estado atual da VM
+7. se estiver parada e nenhuma regra de retencao bloquear, o handler chama `start`
+8. tabela `State` grava `LastAction=START`
+
+Se o ciclo rodar as `20:00`:
+
+1. engine conclui `STOP`
+2. se a VM estiver ligada manualmente e `RETAIN_RUNNING=true`, o resultado vira `SKIP_RETAIN_RUNNING`
+3. caso contrario, o handler chama `deallocate`
+4. tabela `State` grava `LastAction=STOP`
+
+## Extensibilidade
+
+Os pontos naturais de evolucao continuam claros:
+
+- novos handlers em `src/handlers/`
+- novos tipos de recurso no discovery
+- novas regras de avaliacao no `src/scheduler/engine.py`
+- novas colunas operacionais nas tabelas
+- migracao futura para RBAC de Storage por managed identity

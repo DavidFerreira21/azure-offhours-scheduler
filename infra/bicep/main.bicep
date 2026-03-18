@@ -6,50 +6,65 @@ param resourceGroupName string
 @description('Azure region for the deployment.')
 param location string = deployment().location
 
-@description('Function App name (must be globally unique).')
-param functionAppName string
+@description('Prefix used to generate resource names.')
+param namePrefix string
 
-@description('Storage account name (3-24 lowercase letters/numbers).')
-param storageAccountName string
+@description('Optional override for the Function App name.')
+param functionAppName string = ''
 
-@description('Log Analytics workspace name.')
-param logAnalyticsName string
+@description('Optional override for the Storage Account name (3-24 lowercase letters/numbers).')
+param storageAccountName string = ''
 
-@description('Application Insights name.')
-param appInsightsName string
+@description('Optional override for the Log Analytics workspace name.')
+param logAnalyticsName string = ''
 
-@description('App Service plan name (Dedicated).')
-param planName string
+@description('Optional override for the Application Insights name.')
+param appInsightsName string = ''
+
+@description('Optional override for the App Service plan name.')
+param planName string = ''
 
 @description('When true, reuse an existing App Service plan with planName.')
 param useExistingPlan bool = false
 
-@description('List of subscription IDs scanned by the scheduler.')
-param subscriptionIds array
+@description('List of explicit subscription IDs scanned by the scheduler.')
+param subscriptionIds array = []
 
-@description('Path to schedules YAML inside the app package.')
-param schedulesFile string = 'schedules/schedules.yaml'
+@description('Optional management group IDs used to discover additional subscriptions for the scheduler scope.')
+param managementGroupIds array = []
 
-@description('Enable DRY_RUN mode.')
-param dryRun bool = false
+@description('Optional subscription IDs removed from the final scheduler scope after combining subscriptionIds and managementGroupIds.')
+param excludeSubscriptionIds array = []
 
-@description('Default timezone used when resource tag timezone is missing.')
-param defaultTimezone string = 'America/Sao_Paulo'
-
-@description('Tag key that contains the schedule name.')
-param scheduleTagKey string = 'schedule'
-
-@description('If true, do not stop manually started VMs outside stop window.')
-param retainRunning bool = false
-
-@description('If true, do not start manually stopped VMs inside start window.')
-param retainStopped bool = false
+@description('Optional Azure regions scanned by the scheduler. Leave empty to scan all regions in the configured subscriptions.')
+param targetResourceLocations array = []
 
 @description('Maximum scheduler workers for controlled parallelism.')
 param maxWorkers int = 5
 
+@description('Azure Table Storage table name used for global scheduler configuration.')
+param configTableName string = 'OffHoursSchedulerConfig'
+
+@description('Azure Table Storage table name used for schedules.')
+param scheduleTableName string = 'OffHoursSchedulerSchedules'
+
 @description('Azure Table Storage table name used for scheduler state.')
 param stateTableName string = 'OffHoursSchedulerState'
+
+@description('When true, seed default configuration and schedule entities during deployment.')
+param bootstrapDefaults bool = true
+
+@description('Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account.')
+param tableOperatorsGroupObjectId string = ''
+
+var generatedSuffix = take(uniqueString(subscription().subscriptionId, resourceGroupName, namePrefix), 6)
+var normalizedPrefix = toLower(replace(replace(namePrefix, '-', ''), '_', ''))
+var storagePrefix = empty(normalizedPrefix) ? 'offhours' : normalizedPrefix
+var effectiveFunctionAppName = !empty(functionAppName) ? functionAppName : 'func-${namePrefix}-${generatedSuffix}'
+var effectiveStorageAccountName = !empty(storageAccountName) ? storageAccountName : 'st${take(storagePrefix, 16)}${generatedSuffix}'
+var effectiveLogAnalyticsName = !empty(logAnalyticsName) ? logAnalyticsName : 'log-${namePrefix}-${generatedSuffix}'
+var effectiveAppInsightsName = !empty(appInsightsName) ? appInsightsName : 'appi-${namePrefix}-${generatedSuffix}'
+var effectivePlanName = !empty(planName) ? planName : 'asp-${namePrefix}-${generatedSuffix}'
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: resourceGroupName
@@ -61,21 +76,22 @@ module functionStack './modules/functionApp.bicep' = {
   scope: resourceGroup
   params: {
     location: location
-    functionAppName: functionAppName
-    storageAccountName: storageAccountName
-    logAnalyticsName: logAnalyticsName
-    appInsightsName: appInsightsName
-    planName: planName
+    functionAppName: effectiveFunctionAppName
+    storageAccountName: effectiveStorageAccountName
+    logAnalyticsName: effectiveLogAnalyticsName
+    appInsightsName: effectiveAppInsightsName
+    planName: effectivePlanName
     useExistingPlan: useExistingPlan
     subscriptionIds: subscriptionIds
-    schedulesFile: schedulesFile
-    dryRun: dryRun
-    defaultTimezone: defaultTimezone
-    scheduleTagKey: scheduleTagKey
-    retainRunning: retainRunning
-    retainStopped: retainStopped
+    managementGroupIds: managementGroupIds
+    excludeSubscriptionIds: excludeSubscriptionIds
+    targetResourceLocations: targetResourceLocations
     maxWorkers: maxWorkers
+    configTableName: configTableName
+    scheduleTableName: scheduleTableName
     stateTableName: stateTableName
+    bootstrapDefaults: bootstrapDefaults
+    tableOperatorsGroupObjectId: tableOperatorsGroupObjectId
   }
 }
 
@@ -84,10 +100,11 @@ module subscriptionRoles './modules/subscriptionRoles.bicep' = [for subId in sub
   scope: subscription(subId)
   params: {
     principalId: functionStack.outputs.principalId
-    assignmentSeed: functionAppName
+    assignmentSeed: effectiveFunctionAppName
   }
 }]
 
 output functionAppName string = functionStack.outputs.functionAppName
 output functionAppId string = functionStack.outputs.functionAppId
 output principalId string = functionStack.outputs.principalId
+output storageAccountName string = functionStack.outputs.storageAccountName

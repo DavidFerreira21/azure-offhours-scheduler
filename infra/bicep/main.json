@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "12299518328150167989"
+      "templateHash": "6775157335179162702"
     }
   },
   "parameters": {
@@ -22,34 +22,45 @@
         "description": "Azure region for the deployment."
       }
     },
-    "functionAppName": {
+    "namePrefix": {
       "type": "string",
       "metadata": {
-        "description": "Function App name (must be globally unique)."
+        "description": "Prefix used to generate resource names."
+      }
+    },
+    "functionAppName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional override for the Function App name."
       }
     },
     "storageAccountName": {
       "type": "string",
+      "defaultValue": "",
       "metadata": {
-        "description": "Storage account name (3-24 lowercase letters/numbers)."
+        "description": "Optional override for the Storage Account name (3-24 lowercase letters/numbers)."
       }
     },
     "logAnalyticsName": {
       "type": "string",
+      "defaultValue": "",
       "metadata": {
-        "description": "Log Analytics workspace name."
+        "description": "Optional override for the Log Analytics workspace name."
       }
     },
     "appInsightsName": {
       "type": "string",
+      "defaultValue": "",
       "metadata": {
-        "description": "Application Insights name."
+        "description": "Optional override for the Application Insights name."
       }
     },
     "planName": {
       "type": "string",
+      "defaultValue": "",
       "metadata": {
-        "description": "App Service plan name (Dedicated)."
+        "description": "Optional override for the App Service plan name."
       }
     },
     "useExistingPlan": {
@@ -61,50 +72,30 @@
     },
     "subscriptionIds": {
       "type": "array",
+      "defaultValue": [],
       "metadata": {
-        "description": "List of subscription IDs scanned by the scheduler."
+        "description": "List of explicit subscription IDs scanned by the scheduler."
       }
     },
-    "schedulesFile": {
-      "type": "string",
-      "defaultValue": "schedules/schedules.yaml",
+    "managementGroupIds": {
+      "type": "array",
+      "defaultValue": [],
       "metadata": {
-        "description": "Path to schedules YAML inside the app package."
+        "description": "Optional management group IDs used to discover additional subscriptions for the scheduler scope."
       }
     },
-    "dryRun": {
-      "type": "bool",
-      "defaultValue": false,
+    "excludeSubscriptionIds": {
+      "type": "array",
+      "defaultValue": [],
       "metadata": {
-        "description": "Enable DRY_RUN mode."
+        "description": "Optional subscription IDs removed from the final scheduler scope after combining subscriptionIds and managementGroupIds."
       }
     },
-    "defaultTimezone": {
-      "type": "string",
-      "defaultValue": "America/Sao_Paulo",
+    "targetResourceLocations": {
+      "type": "array",
+      "defaultValue": [],
       "metadata": {
-        "description": "Default timezone used when resource tag timezone is missing."
-      }
-    },
-    "scheduleTagKey": {
-      "type": "string",
-      "defaultValue": "schedule",
-      "metadata": {
-        "description": "Tag key that contains the schedule name."
-      }
-    },
-    "retainRunning": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "If true, do not stop manually started VMs outside stop window."
-      }
-    },
-    "retainStopped": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "If true, do not start manually stopped VMs inside start window."
+        "description": "Optional Azure regions scanned by the scheduler. Leave empty to scan all regions in the configured subscriptions."
       }
     },
     "maxWorkers": {
@@ -114,13 +105,51 @@
         "description": "Maximum scheduler workers for controlled parallelism."
       }
     },
+    "configTableName": {
+      "type": "string",
+      "defaultValue": "OffHoursSchedulerConfig",
+      "metadata": {
+        "description": "Azure Table Storage table name used for global scheduler configuration."
+      }
+    },
+    "scheduleTableName": {
+      "type": "string",
+      "defaultValue": "OffHoursSchedulerSchedules",
+      "metadata": {
+        "description": "Azure Table Storage table name used for schedules."
+      }
+    },
     "stateTableName": {
       "type": "string",
       "defaultValue": "OffHoursSchedulerState",
       "metadata": {
         "description": "Azure Table Storage table name used for scheduler state."
       }
+    },
+    "bootstrapDefaults": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "When true, seed default configuration and schedule entities during deployment."
+      }
+    },
+    "tableOperatorsGroupObjectId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account."
+      }
     }
+  },
+  "variables": {
+    "generatedSuffix": "[take(uniqueString(subscription().subscriptionId, parameters('resourceGroupName'), parameters('namePrefix')), 6)]",
+    "normalizedPrefix": "[toLower(replace(replace(parameters('namePrefix'), '-', ''), '_', ''))]",
+    "storagePrefix": "[if(empty(variables('normalizedPrefix')), 'offhours', variables('normalizedPrefix'))]",
+    "effectiveFunctionAppName": "[if(not(empty(parameters('functionAppName'))), parameters('functionAppName'), format('func-{0}-{1}', parameters('namePrefix'), variables('generatedSuffix')))]",
+    "effectiveStorageAccountName": "[if(not(empty(parameters('storageAccountName'))), parameters('storageAccountName'), format('st{0}{1}', take(variables('storagePrefix'), 16), variables('generatedSuffix')))]",
+    "effectiveLogAnalyticsName": "[if(not(empty(parameters('logAnalyticsName'))), parameters('logAnalyticsName'), format('log-{0}-{1}', parameters('namePrefix'), variables('generatedSuffix')))]",
+    "effectiveAppInsightsName": "[if(not(empty(parameters('appInsightsName'))), parameters('appInsightsName'), format('appi-{0}-{1}', parameters('namePrefix'), variables('generatedSuffix')))]",
+    "effectivePlanName": "[if(not(empty(parameters('planName'))), parameters('planName'), format('asp-{0}-{1}', parameters('namePrefix'), variables('generatedSuffix')))]"
   },
   "resources": [
     {
@@ -144,19 +173,19 @@
             "value": "[parameters('location')]"
           },
           "functionAppName": {
-            "value": "[parameters('functionAppName')]"
+            "value": "[variables('effectiveFunctionAppName')]"
           },
           "storageAccountName": {
-            "value": "[parameters('storageAccountName')]"
+            "value": "[variables('effectiveStorageAccountName')]"
           },
           "logAnalyticsName": {
-            "value": "[parameters('logAnalyticsName')]"
+            "value": "[variables('effectiveLogAnalyticsName')]"
           },
           "appInsightsName": {
-            "value": "[parameters('appInsightsName')]"
+            "value": "[variables('effectiveAppInsightsName')]"
           },
           "planName": {
-            "value": "[parameters('planName')]"
+            "value": "[variables('effectivePlanName')]"
           },
           "useExistingPlan": {
             "value": "[parameters('useExistingPlan')]"
@@ -164,29 +193,32 @@
           "subscriptionIds": {
             "value": "[parameters('subscriptionIds')]"
           },
-          "schedulesFile": {
-            "value": "[parameters('schedulesFile')]"
+          "managementGroupIds": {
+            "value": "[parameters('managementGroupIds')]"
           },
-          "dryRun": {
-            "value": "[parameters('dryRun')]"
+          "excludeSubscriptionIds": {
+            "value": "[parameters('excludeSubscriptionIds')]"
           },
-          "defaultTimezone": {
-            "value": "[parameters('defaultTimezone')]"
-          },
-          "scheduleTagKey": {
-            "value": "[parameters('scheduleTagKey')]"
-          },
-          "retainRunning": {
-            "value": "[parameters('retainRunning')]"
-          },
-          "retainStopped": {
-            "value": "[parameters('retainStopped')]"
+          "targetResourceLocations": {
+            "value": "[parameters('targetResourceLocations')]"
           },
           "maxWorkers": {
             "value": "[parameters('maxWorkers')]"
           },
+          "configTableName": {
+            "value": "[parameters('configTableName')]"
+          },
+          "scheduleTableName": {
+            "value": "[parameters('scheduleTableName')]"
+          },
           "stateTableName": {
             "value": "[parameters('stateTableName')]"
+          },
+          "bootstrapDefaults": {
+            "value": "[parameters('bootstrapDefaults')]"
+          },
+          "tableOperatorsGroupObjectId": {
+            "value": "[parameters('tableOperatorsGroupObjectId')]"
           }
         },
         "template": {
@@ -196,7 +228,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "1975807564143754643"
+              "templateHash": "9711255497913304743"
             }
           },
           "parameters": {
@@ -249,46 +281,25 @@
                 "description": "List of subscription IDs scanned by the scheduler."
               }
             },
-            "schedulesFile": {
-              "type": "string",
-              "defaultValue": "schedules/schedules.yaml",
+            "managementGroupIds": {
+              "type": "array",
+              "defaultValue": [],
               "metadata": {
-                "description": "Path to schedules YAML inside the app package."
+                "description": "Optional management group IDs declared for scheduler scope resolution."
               }
             },
-            "dryRun": {
-              "type": "bool",
-              "defaultValue": false,
+            "excludeSubscriptionIds": {
+              "type": "array",
+              "defaultValue": [],
               "metadata": {
-                "description": "Enable DRY_RUN mode."
+                "description": "Optional subscription IDs excluded from the resolved scheduler scope."
               }
             },
-            "defaultTimezone": {
-              "type": "string",
-              "defaultValue": "America/Sao_Paulo",
+            "targetResourceLocations": {
+              "type": "array",
+              "defaultValue": [],
               "metadata": {
-                "description": "Default timezone used when the resource tag timezone is missing."
-              }
-            },
-            "scheduleTagKey": {
-              "type": "string",
-              "defaultValue": "schedule",
-              "metadata": {
-                "description": "Tag key that contains the schedule name."
-              }
-            },
-            "retainRunning": {
-              "type": "bool",
-              "defaultValue": false,
-              "metadata": {
-                "description": "If true, do not stop manually started VMs outside the stop window."
-              }
-            },
-            "retainStopped": {
-              "type": "bool",
-              "defaultValue": false,
-              "metadata": {
-                "description": "If true, do not start manually stopped VMs inside the start window."
+                "description": "Optional Azure regions scanned by the scheduler. Leave empty to scan all regions in the configured subscriptions."
               }
             },
             "maxWorkers": {
@@ -298,15 +309,44 @@
                 "description": "Maximum scheduler workers for controlled parallelism."
               }
             },
+            "configTableName": {
+              "type": "string",
+              "defaultValue": "OffHoursSchedulerConfig",
+              "metadata": {
+                "description": "Azure Table Storage table name used for global scheduler configuration."
+              }
+            },
+            "scheduleTableName": {
+              "type": "string",
+              "defaultValue": "OffHoursSchedulerSchedules",
+              "metadata": {
+                "description": "Azure Table Storage table name used for schedules."
+              }
+            },
             "stateTableName": {
               "type": "string",
               "defaultValue": "OffHoursSchedulerState",
               "metadata": {
                 "description": "Azure Table Storage table name used for scheduler state."
               }
+            },
+            "bootstrapDefaults": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "When true, seed the configuration tables with a safe default bootstrap."
+              }
+            },
+            "tableOperatorsGroupObjectId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account."
+              }
             }
           },
           "variables": {
+            "storageTableDataContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]",
             "serverFarmId": "[if(parameters('useExistingPlan'), resourceId('Microsoft.Web/serverfarms', parameters('planName')), resourceId('Microsoft.Web/serverfarms', parameters('planName')))]"
           },
           "resources": [
@@ -328,7 +368,38 @@
             {
               "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
               "apiVersion": "2023-05-01",
+              "name": "[format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
+              "apiVersion": "2023-05-01",
               "name": "[format('{0}/default/{1}', parameters('storageAccountName'), parameters('stateTableName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "condition": "[not(empty(parameters('tableOperatorsGroupObjectId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('tableOperatorsGroupObjectId'), 'storage-table-data-contributor')]",
+              "properties": {
+                "roleDefinitionId": "[variables('storageTableDataContributorRoleDefinitionId')]",
+                "principalId": "[parameters('tableOperatorsGroupObjectId')]",
+                "principalType": "Group"
+              },
               "dependsOn": [
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
               ]
@@ -378,6 +449,59 @@
               }
             },
             {
+              "condition": "[parameters('bootstrapDefaults')]",
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-bootstrap-id', parameters('functionAppName'))]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "condition": "[parameters('bootstrapDefaults')]",
+              "type": "Microsoft.Resources/deploymentScripts",
+              "apiVersion": "2023-08-01",
+              "name": "bootstrap-scheduler-defaults",
+              "location": "[parameters('location')]",
+              "kind": "AzureCLI",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName'))))]": {}
+                }
+              },
+              "properties": {
+                "azCliVersion": "2.61.0",
+                "cleanupPreference": "OnSuccess",
+                "retentionInterval": "P1D",
+                "timeout": "PT15M",
+                "forceUpdateTag": "[deployment().name]",
+                "environmentVariables": [
+                  {
+                    "name": "BOOTSTRAP_CONNECTION_STRING",
+                    "secureValue": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
+                  },
+                  {
+                    "name": "BOOTSTRAP_CONFIG_TABLE",
+                    "value": "[parameters('configTableName')]"
+                  },
+                  {
+                    "name": "BOOTSTRAP_SCHEDULE_TABLE",
+                    "value": "[parameters('scheduleTableName')]"
+                  },
+                  {
+                    "name": "BOOTSTRAP_UPDATED_BY",
+                    "value": "bicep-bootstrap"
+                  }
+                ],
+                "scriptContent": "      set -euo pipefail\n\n      updated_at_utc=\"$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"\n\n      entity_exists() {\n        local table_name=\"$1\"\n        local partition_key=\"$2\"\n        local row_key=\"$3\"\n\n        az storage entity show \\\n          --connection-string \"$BOOTSTRAP_CONNECTION_STRING\" \\\n          --table-name \"$table_name\" \\\n          --partition-key \"$partition_key\" \\\n          --row-key \"$row_key\" \\\n          --only-show-errors \\\n          -o none >/dev/null 2>&1\n      }\n\n      if ! entity_exists \"$BOOTSTRAP_CONFIG_TABLE\" \"GLOBAL\" \"runtime\"; then\n        az storage entity insert \\\n          --connection-string \"$BOOTSTRAP_CONNECTION_STRING\" \\\n          --table-name \"$BOOTSTRAP_CONFIG_TABLE\" \\\n          --if-exists fail \\\n          --entity \\\n            PartitionKey=GLOBAL \\\n            RowKey=runtime \\\n            DRY_RUN=true \\\n            DEFAULT_TIMEZONE=America/Sao_Paulo \\\n            SCHEDULE_TAG_KEY=schedule \\\n            RETAIN_RUNNING=false \\\n            RETAIN_STOPPED=false \\\n            Version=1 \\\n            UpdatedAtUtc=\"$updated_at_utc\" \\\n            UpdatedBy=\"$BOOTSTRAP_UPDATED_BY\" \\\n          --only-show-errors \\\n          -o none\n      fi\n\n      if ! entity_exists \"$BOOTSTRAP_SCHEDULE_TABLE\" \"SCHEDULE\" \"business-hours\"; then\n        az storage entity insert \\\n          --connection-string \"$BOOTSTRAP_CONNECTION_STRING\" \\\n          --table-name \"$BOOTSTRAP_SCHEDULE_TABLE\" \\\n          --if-exists fail \\\n          --entity \\\n            PartitionKey=SCHEDULE \\\n            RowKey=business-hours \\\n            Start=08:00 \\\n            Stop=18:00 \\\n            SkipDays=saturday,sunday \\\n            Enabled=true \\\n            Version=1 \\\n            UpdatedAtUtc=\"$updated_at_utc\" \\\n            UpdatedBy=\"$BOOTSTRAP_UPDATED_BY\" \\\n          --only-show-errors \\\n          -o none\n      fi\n    "
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/tableServices/tables', split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName')), '/')[0], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName')), '/')[1], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName')), '/')[2])]",
+                "[resourceId('Microsoft.Storage/storageAccounts/tableServices/tables', split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName')), '/')[0], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName')), '/')[1], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName')), '/')[2])]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
               "type": "Microsoft.Web/sites",
               "apiVersion": "2022-09-01",
               "name": "[parameters('functionAppName')]",
@@ -413,36 +537,32 @@
                       "value": "[join(parameters('subscriptionIds'), ',')]"
                     },
                     {
-                      "name": "SCHEDULES_FILE",
-                      "value": "[parameters('schedulesFile')]"
+                      "name": "DECLARED_MANAGEMENT_GROUP_IDS",
+                      "value": "[join(parameters('managementGroupIds'), ',')]"
                     },
                     {
-                      "name": "DRY_RUN",
-                      "value": "[toLower(string(parameters('dryRun')))]"
+                      "name": "DECLARED_EXCLUDE_SUBSCRIPTION_IDS",
+                      "value": "[join(parameters('excludeSubscriptionIds'), ',')]"
                     },
                     {
-                      "name": "DEFAULT_TIMEZONE",
-                      "value": "[parameters('defaultTimezone')]"
+                      "name": "TARGET_RESOURCE_LOCATIONS",
+                      "value": "[join(parameters('targetResourceLocations'), ',')]"
                     },
                     {
-                      "name": "SCHEDULE_TAG_KEY",
-                      "value": "[parameters('scheduleTagKey')]"
+                      "name": "SCHEDULER_STORAGE_CONNECTION_STRING",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
                     },
                     {
-                      "name": "RETAIN_RUNNING",
-                      "value": "[toLower(string(parameters('retainRunning')))]"
+                      "name": "CONFIG_STORAGE_TABLE_NAME",
+                      "value": "[parameters('configTableName')]"
                     },
                     {
-                      "name": "RETAIN_STOPPED",
-                      "value": "[toLower(string(parameters('retainStopped')))]"
+                      "name": "SCHEDULE_STORAGE_TABLE_NAME",
+                      "value": "[parameters('scheduleTableName')]"
                     },
                     {
                       "name": "MAX_WORKERS",
                       "value": "[string(parameters('maxWorkers'))]"
-                    },
-                    {
-                      "name": "STATE_STORAGE_CONNECTION_STRING",
-                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
                     },
                     {
                       "name": "STATE_STORAGE_TABLE_NAME",
@@ -475,6 +595,14 @@
               "type": "string",
               "value": "[parameters('storageAccountName')]"
             },
+            "configTableName": {
+              "type": "string",
+              "value": "[parameters('configTableName')]"
+            },
+            "scheduleTableName": {
+              "type": "string",
+              "value": "[parameters('scheduleTableName')]"
+            },
             "stateTableName": {
               "type": "string",
               "value": "[parameters('stateTableName')]"
@@ -506,7 +634,7 @@
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.principalId.value]"
           },
           "assignmentSeed": {
-            "value": "[parameters('functionAppName')]"
+            "value": "[variables('effectiveFunctionAppName')]"
           }
         },
         "template": {
@@ -578,6 +706,10 @@
     "principalId": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.principalId.value]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'schedulerFunctionStack'), '2025-04-01').outputs.storageAccountName.value]"
     }
   }
 }

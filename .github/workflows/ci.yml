@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run Ruff lint
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/bootstrap_scheduler_tables.sh
+          bash -n scripts/deploy_scheduler.sh
+          bash -n scripts/prepare_function_app_publish.sh
+
+      - name: Prepare function publish bundle
+        run: ./scripts/prepare_function_app_publish.sh
+
+      - name: Setup Bicep
+        uses: Azure/setup-bicep@v2
+
+      - name: Validate Bicep compilation
+        run: bicep build --file infra/bicep/main.bicep
+
+      - name: Validate JSON examples
+        run: |
+          python -m json.tool infra/bicep/main.parameters.example.json >/dev/null
+          python -m json.tool function/local.settings.json.example >/dev/null

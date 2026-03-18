@@ -24,29 +24,37 @@ param useExistingPlan bool = false
 @description('List of subscription IDs scanned by the scheduler.')
 param subscriptionIds array
 
-@description('Path to schedules YAML inside the app package.')
-param schedulesFile string = 'schedules/schedules.yaml'
+@description('Optional management group IDs declared for scheduler scope resolution.')
+param managementGroupIds array = []
 
-@description('Enable DRY_RUN mode.')
-param dryRun bool = false
+@description('Optional subscription IDs excluded from the resolved scheduler scope.')
+param excludeSubscriptionIds array = []
 
-@description('Default timezone used when the resource tag timezone is missing.')
-param defaultTimezone string = 'America/Sao_Paulo'
-
-@description('Tag key that contains the schedule name.')
-param scheduleTagKey string = 'schedule'
-
-@description('If true, do not stop manually started VMs outside the stop window.')
-param retainRunning bool = false
-
-@description('If true, do not start manually stopped VMs inside the start window.')
-param retainStopped bool = false
+@description('Optional Azure regions scanned by the scheduler. Leave empty to scan all regions in the configured subscriptions.')
+param targetResourceLocations array = []
 
 @description('Maximum scheduler workers for controlled parallelism.')
 param maxWorkers int = 5
 
+@description('Azure Table Storage table name used for global scheduler configuration.')
+param configTableName string = 'OffHoursSchedulerConfig'
+
+@description('Azure Table Storage table name used for schedules.')
+param scheduleTableName string = 'OffHoursSchedulerSchedules'
+
 @description('Azure Table Storage table name used for scheduler state.')
 param stateTableName string = 'OffHoursSchedulerState'
+
+@description('When true, seed the configuration tables with a safe default bootstrap.')
+param bootstrapDefaults bool = true
+
+@description('Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account.')
+param tableOperatorsGroupObjectId string = ''
+
+var storageTableDataContributorRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
+)
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -62,8 +70,26 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
+resource configTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  name: '${storage.name}/default/${configTableName}'
+}
+
+resource scheduleTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  name: '${storage.name}/default/${scheduleTableName}'
+}
+
 resource stateTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   name: '${storage.name}/default/${stateTableName}'
+}
+
+resource tableOperatorsAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(tableOperatorsGroupObjectId)) {
+  name: guid(storage.id, tableOperatorsGroupObjectId, 'storage-table-data-contributor')
+  scope: storage
+  properties: {
+    roleDefinitionId: storageTableDataContributorRoleDefinitionId
+    principalId: tableOperatorsGroupObjectId
+    principalType: 'Group'
+  }
 }
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
@@ -110,6 +136,110 @@ resource existingPlan 'Microsoft.Web/serverfarms@2022-09-01' existing = if (useE
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
 var serverFarmId = useExistingPlan ? existingPlan.id : plan.id
 
+resource bootstrapScriptIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (bootstrapDefaults) {
+  name: '${functionAppName}-bootstrap-id'
+  location: location
+}
+
+resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (bootstrapDefaults) {
+  name: 'bootstrap-scheduler-defaults'
+  location: location
+  kind: 'AzureCLI'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${bootstrapScriptIdentity.id}': {}
+    }
+  }
+  properties: {
+    azCliVersion: '2.61.0'
+    cleanupPreference: 'OnSuccess'
+    retentionInterval: 'P1D'
+    timeout: 'PT15M'
+    forceUpdateTag: deployment().name
+    environmentVariables: [
+      {
+        name: 'BOOTSTRAP_CONNECTION_STRING'
+        secureValue: storageConnectionString
+      }
+      {
+        name: 'BOOTSTRAP_CONFIG_TABLE'
+        value: configTableName
+      }
+      {
+        name: 'BOOTSTRAP_SCHEDULE_TABLE'
+        value: scheduleTableName
+      }
+      {
+        name: 'BOOTSTRAP_UPDATED_BY'
+        value: 'bicep-bootstrap'
+      }
+    ]
+    scriptContent: '''
+      set -euo pipefail
+
+      updated_at_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+      entity_exists() {
+        local table_name="$1"
+        local partition_key="$2"
+        local row_key="$3"
+
+        az storage entity show \
+          --connection-string "$BOOTSTRAP_CONNECTION_STRING" \
+          --table-name "$table_name" \
+          --partition-key "$partition_key" \
+          --row-key "$row_key" \
+          --only-show-errors \
+          -o none >/dev/null 2>&1
+      }
+
+      if ! entity_exists "$BOOTSTRAP_CONFIG_TABLE" "GLOBAL" "runtime"; then
+        az storage entity insert \
+          --connection-string "$BOOTSTRAP_CONNECTION_STRING" \
+          --table-name "$BOOTSTRAP_CONFIG_TABLE" \
+          --if-exists fail \
+          --entity \
+            PartitionKey=GLOBAL \
+            RowKey=runtime \
+            DRY_RUN=true \
+            DEFAULT_TIMEZONE=America/Sao_Paulo \
+            SCHEDULE_TAG_KEY=schedule \
+            RETAIN_RUNNING=false \
+            RETAIN_STOPPED=false \
+            Version=1 \
+            UpdatedAtUtc="$updated_at_utc" \
+            UpdatedBy="$BOOTSTRAP_UPDATED_BY" \
+          --only-show-errors \
+          -o none
+      fi
+
+      if ! entity_exists "$BOOTSTRAP_SCHEDULE_TABLE" "SCHEDULE" "business-hours"; then
+        az storage entity insert \
+          --connection-string "$BOOTSTRAP_CONNECTION_STRING" \
+          --table-name "$BOOTSTRAP_SCHEDULE_TABLE" \
+          --if-exists fail \
+          --entity \
+            PartitionKey=SCHEDULE \
+            RowKey=business-hours \
+            Start=08:00 \
+            Stop=18:00 \
+            SkipDays=saturday,sunday \
+            Enabled=true \
+            Version=1 \
+            UpdatedAtUtc="$updated_at_utc" \
+            UpdatedBy="$BOOTSTRAP_UPDATED_BY" \
+          --only-show-errors \
+          -o none
+      fi
+    '''
+  }
+  dependsOn: [
+    configTable
+    scheduleTable
+  ]
+}
+
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
@@ -144,36 +274,32 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           value: join(subscriptionIds, ',')
         }
         {
-          name: 'SCHEDULES_FILE'
-          value: schedulesFile
+          name: 'DECLARED_MANAGEMENT_GROUP_IDS'
+          value: join(managementGroupIds, ',')
         }
         {
-          name: 'DRY_RUN'
-          value: toLower(string(dryRun))
+          name: 'DECLARED_EXCLUDE_SUBSCRIPTION_IDS'
+          value: join(excludeSubscriptionIds, ',')
         }
         {
-          name: 'DEFAULT_TIMEZONE'
-          value: defaultTimezone
+          name: 'TARGET_RESOURCE_LOCATIONS'
+          value: join(targetResourceLocations, ',')
         }
         {
-          name: 'SCHEDULE_TAG_KEY'
-          value: scheduleTagKey
+          name: 'SCHEDULER_STORAGE_CONNECTION_STRING'
+          value: storageConnectionString
         }
         {
-          name: 'RETAIN_RUNNING'
-          value: toLower(string(retainRunning))
+          name: 'CONFIG_STORAGE_TABLE_NAME'
+          value: configTableName
         }
         {
-          name: 'RETAIN_STOPPED'
-          value: toLower(string(retainStopped))
+          name: 'SCHEDULE_STORAGE_TABLE_NAME'
+          value: scheduleTableName
         }
         {
           name: 'MAX_WORKERS'
           value: string(maxWorkers)
-        }
-        {
-          name: 'STATE_STORAGE_CONNECTION_STRING'
-          value: storageConnectionString
         }
         {
           name: 'STATE_STORAGE_TABLE_NAME'
@@ -188,4 +314,6 @@ output functionAppName string = functionApp.name
 output functionAppId string = functionApp.id
 output principalId string = functionApp.identity.principalId
 output storageAccountName string = storage.name
+output configTableName string = configTableName
+output scheduleTableName string = scheduleTableName
 output stateTableName string = stateTableName

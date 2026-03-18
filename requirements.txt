@@ -3,4 +3,3 @@ azure-identity
 azure-mgmt-resourcegraph
 azure-mgmt-compute
 azure-data-tables
-PyYAML

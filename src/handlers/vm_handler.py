@@ -44,7 +44,12 @@ class VirtualMachineHandler(ResourceHandler):
         if power_status in {"powerstate/running", "powerstate/starting"}:
             return "running"
 
-        if power_status in {"powerstate/deallocated", "powerstate/deallocating", "powerstate/stopped", "powerstate/stopping"}:
+        if power_status in {
+            "powerstate/deallocated",
+            "powerstate/deallocating",
+            "powerstate/stopped",
+            "powerstate/stopping",
+        }:
             return "stopped"
 
         return "unknown"

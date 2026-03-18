@@ -8,20 +8,8 @@
     "location": {
       "value": "eastus"
     },
-    "functionAppName": {
-      "value": "func-offhours-scheduler-001"
-    },
-    "storageAccountName": {
-      "value": "stoffhourssched001"
-    },
-    "logAnalyticsName": {
-      "value": "log-offhours-scheduler"
-    },
-    "appInsightsName": {
-      "value": "appi-offhours-scheduler"
-    },
-    "planName": {
-      "value": "asp-offhours-scheduler"
+    "namePrefix": {
+      "value": "offhours"
     },
     "useExistingPlan": {
       "value": false
@@ -31,29 +19,32 @@
         "00000000-0000-0000-0000-000000000000"
       ]
     },
-    "schedulesFile": {
-      "value": "schedules/schedules.yaml"
+    "managementGroupIds": {
+      "value": []
     },
-    "dryRun": {
-      "value": false
+    "excludeSubscriptionIds": {
+      "value": []
     },
-    "defaultTimezone": {
-      "value": "America/Sao_Paulo"
+    "targetResourceLocations": {
+      "value": []
     },
-    "scheduleTagKey": {
-      "value": "schedule"
+    "configTableName": {
+      "value": "OffHoursSchedulerConfig"
     },
-    "retainRunning": {
-      "value": false
-    },
-    "retainStopped": {
-      "value": false
-    },
-    "maxWorkers": {
-      "value": 5
+    "scheduleTableName": {
+      "value": "OffHoursSchedulerSchedules"
     },
     "stateTableName": {
       "value": "OffHoursSchedulerState"
+    },
+    "bootstrapDefaults": {
+      "value": true
+    },
+    "tableOperatorsGroupObjectId": {
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    "maxWorkers": {
+      "value": 5
     }
   }
 }

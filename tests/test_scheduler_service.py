@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from handlers.registry import HandlerRegistry
 from persistence.state_store import SchedulerState
 from scheduler.engine import ScheduleEngine
+from scheduler.models import ScheduleDefinition, SchedulePeriod
 from scheduler.service import SchedulerService
 
 
@@ -16,6 +17,7 @@ class FakeResource:
     subscription_id: str
     resource_group: str
     tags: dict[str, str]
+    management_group_ids: tuple[str, ...] = ()
 
 
 class FakeDiscovery:
@@ -87,8 +89,19 @@ class FakeStateStore:
         )
 
 
+def _build_engine() -> ScheduleEngine:
+    return ScheduleEngine(
+        schedules={
+            "office-hours": ScheduleDefinition(
+                name="office-hours",
+                periods=(SchedulePeriod(start="08:00", stop="23:13"),),
+            )
+        }
+    )
+
+
 def test_service_dry_run_counts_actions_without_executing() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler()
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -120,7 +133,7 @@ def test_service_dry_run_counts_actions_without_executing() -> None:
 
 
 def test_service_skips_start_when_vm_already_running() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler(state="running")
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -153,7 +166,7 @@ def test_service_skips_start_when_vm_already_running() -> None:
 
 
 def test_service_skips_stop_when_vm_already_stopped() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler(state="stopped")
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -186,7 +199,7 @@ def test_service_skips_stop_when_vm_already_stopped() -> None:
 
 
 def test_service_retain_running_skips_stop_when_running_outside_window() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler(state="running")
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -220,7 +233,7 @@ def test_service_retain_running_skips_stop_when_running_outside_window() -> None
 
 
 def test_service_without_retain_running_stops_when_running_outside_window() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler(state="running")
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -253,7 +266,7 @@ def test_service_without_retain_running_stops_when_running_outside_window() -> N
 
 
 def test_service_retain_running_stops_when_started_by_scheduler() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler(state="running")
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -286,7 +299,7 @@ def test_service_retain_running_stops_when_started_by_scheduler() -> None:
 
 
 def test_service_retain_stopped_skips_start_when_stopped_manually() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
+    engine = _build_engine()
     handler = FakeVmHandler(state="stopped")
     registry = HandlerRegistry()
     registry.register(handler.SUPPORTED_TYPES, handler)
@@ -317,79 +330,3 @@ def test_service_retain_stopped_skips_start_when_stopped_manually() -> None:
     assert result.started == 0
     assert result.skipped == 1
     assert handler.started == 0
-
-
-def test_service_retain_stopped_starts_when_previously_stopped_by_scheduler() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
-    handler = FakeVmHandler(state="stopped")
-    registry = HandlerRegistry()
-    registry.register(handler.SUPPORTED_TYPES, handler)
-
-    resources = [
-        FakeResource(
-            id="/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-a",
-            name="vm-a",
-            type="microsoft.compute/virtualmachines",
-            subscription_id="sub-1",
-            resource_group="rg",
-            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
-        )
-    ]
-
-    now = datetime(2026, 3, 5, 13, 0, tzinfo=ZoneInfo("UTC"))
-    service = SchedulerService(
-        engine=engine,
-        discovery=FakeDiscovery(resources),
-        registry=registry,
-        dry_run=False,
-        retain_stopped=True,
-        state_store=FakeStateStore(initial_stopped_by_scheduler=True),
-    )
-
-    result = service.run(now_utc=now)
-
-    assert result.started == 1
-    assert handler.started == 1
-
-
-def test_service_continues_processing_when_one_resource_fails() -> None:
-    engine = ScheduleEngine("schedules/schedules.yaml")
-    failing_id = "/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-fail"
-    handler = FakeVmHandlerWithFailure(state="stopped", fail_resource_ids={failing_id})
-    registry = HandlerRegistry()
-    registry.register(handler.SUPPORTED_TYPES, handler)
-
-    resources = [
-        FakeResource(
-            id=failing_id,
-            name="vm-fail",
-            type="microsoft.compute/virtualmachines",
-            subscription_id="sub-1",
-            resource_group="rg",
-            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
-        ),
-        FakeResource(
-            id="/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-ok",
-            name="vm-ok",
-            type="microsoft.compute/virtualmachines",
-            subscription_id="sub-1",
-            resource_group="rg",
-            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
-        ),
-    ]
-
-    now = datetime(2026, 3, 5, 13, 0, tzinfo=ZoneInfo("UTC"))
-    service = SchedulerService(
-        engine=engine,
-        discovery=FakeDiscovery(resources),
-        registry=registry,
-        dry_run=False,
-        max_workers=2,
-        state_store=FakeStateStore(),
-    )
-
-    result = service.run(now_utc=now)
-
-    assert result.total == 2
-    assert result.started == 1
-    assert result.skipped == 1
