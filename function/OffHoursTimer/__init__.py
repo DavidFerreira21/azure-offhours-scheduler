@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import sys
+import uuid
 from pathlib import Path
 
 import azure.functions as func
@@ -29,13 +31,15 @@ from handlers.registry import HandlerRegistry
 from handlers.vm_handler import VirtualMachineHandler
 from persistence.config_store import AzureTableGlobalConfigStore, AzureTableScheduleStore
 from persistence.state_store import AzureTableStateStore, NoopStateStore
+from reporting.report_builder import build_execution_report
 from scheduler.engine import ScheduleEngine
 from scheduler.service import SchedulerService
 
 
 def main(timer: func.TimerRequest) -> None:
+    run_id = str(uuid.uuid4())
     if timer.past_due:
-        logging.warning("Timer is past due")
+        logging.warning("[run_id=%s] Timer is past due", run_id)
 
     settings = Settings.from_env()
     global_config = AzureTableGlobalConfigStore(
@@ -78,26 +82,31 @@ def main(timer: func.TimerRequest) -> None:
         retain_stopped=global_config.retain_stopped,
         max_workers=settings.max_workers,
         state_store=state_store,
+        run_id=run_id,
     )
-    summary = service.run()
+    run_result = service.run()
+    report = build_execution_report(run_result)
 
     logging.info(
         (
-            "Cycle finished: total=%s started=%s stopped=%s skipped=%s "
+            "[run_id=%s] Cycle finished: total=%s started=%s stopped=%s skipped=%s "
             "dry_run=%s default_timezone=%s schedule_tag_key=%s "
-            "retain_running=%s retain_stopped=%s max_workers=%s "
+            "retain_running=%s retain_stopped=%s max_workers=%s duration_sec=%s "
             "state_table=%s target_resource_locations=%s"
         ),
-        summary.total,
-        summary.started,
-        summary.stopped,
-        summary.skipped,
+        run_id,
+        run_result.total,
+        run_result.started,
+        run_result.stopped,
+        run_result.skipped,
         global_config.dry_run,
         global_config.default_timezone,
         global_config.schedule_tag_key,
         global_config.retain_running,
         global_config.retain_stopped,
         settings.max_workers,
+        run_result.duration_sec,
         settings.state_storage_table_name,
         ",".join(settings.target_resource_locations) or "<all>",
     )
+    logging.info(json.dumps(report, sort_keys=True))

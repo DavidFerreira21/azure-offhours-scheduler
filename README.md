@@ -4,184 +4,216 @@
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.12-blue.svg)
 
-Azure OffHours Scheduler e uma ferramenta open source focada em economia de custo no Azure.
+**Desligue automaticamente recursos não produtivos fora do horário, de forma centralizada, auditável e segura.**
 
-A proposta e simples: manter ambientes nao produtivos, como dev, hml, sandbox e labs, desligados fora do horario comercial e liga-los apenas quando necessario.
+Azure OffHours Scheduler é uma automação open source pronta para produção que reduz custo no Azure com schedules orientados por tabela, escopo controlado e execução segura.
 
-O projeto faz isso combinando:
+## Por Que Este Projeto?
 
-- tags nos recursos
-- janelas operacionais em Azure Table Storage
-- automacao via Azure Function
-- escopo tecnico e operacional controlado
+- Reduz custo de compute sem exigir automações diferentes para cada time
+- Permite operação segura com schedules editáveis após o deploy
+- Suporta ambientes enterprise com múltiplas subscriptions e governança centralizada
+- Respeita intervenções manuais com regras de retenção
+- Mantém a solução enxuta, previsível e simples de operar
 
-No estado atual, o projeto executa acoes reais para:
+## O Problema
 
-- `Microsoft.Compute/virtualMachines`
+Grande parte das soluções de off-hours falha nos mesmos pontos:
 
-Licenca:
+- schedules ficam hardcoded em arquivos ou app settings
+- alterar janelas operacionais exige código ou redeploy
+- controlar escopo entre subscriptions vira operação manual e frágil
+- overrides manuais são desfeitos rápido demais
+- os logs mostram que algo rodou, mas não deixam claro o resultado
 
-- Apache License 2.0
+## A Solução
 
-Versao atual:
+Azure OffHours Scheduler centraliza a configuração operacional do scheduler sem misturar regra de negócio com configuração técnica de runtime:
 
-- `1.0.0`
+- runtime fica em app settings da Function e no Bicep
+- schedules e comportamento global ficam em Azure Table Storage
+- os recursos entram no ciclo por tag, por exemplo `schedule=business-hours`
+- o escopo pode ser controlado por subscription, management group e exclusões
+- cada execução gera um relatório estruturado com resultado por recurso
 
-## O Que o Projeto Entrega
-
-- Azure Function com timer
-- discovery via Azure Resource Graph
-- configuracao operacional table-driven
-- escopo dinamico por subscription e management group
-- retencao para respeitar override manual
-- deploy com Bicep
-- bootstrap default das tabelas
-
-## Como Funciona
-
-Fluxo de alto nivel:
+## Arquitetura Simplificada
 
 ```text
 Timer Trigger
-  -> le Config e Schedules no Azure Table Storage
-  -> consulta Resource Graph
-  -> avalia cada recurso no Schedule Engine
-  -> executa o handler correto
-  -> grava estado operacional quando necessario
+  ↓
+Config + Schedules no Table Storage
+  ↓
+Discovery via Azure Resource Graph
+  ↓
+Avaliação de regras e escopo
+  ↓
+Ação: START | STOP | SKIP
+  ↓
+Persistência de estado
+  ↓
+Relatório estruturado da execução
 ```
 
-Modelo de tabelas:
+Tabelas principais:
 
 - `OffHoursSchedulerConfig`
 - `OffHoursSchedulerSchedules`
 - `OffHoursSchedulerState`
 
-Observacao:
-
-- para campos booleanos nas tabelas, prefira boolean real em vez de texto
-- exemplos: `DRY_RUN`, `RETAIN_RUNNING`, `RETAIN_STOPPED`, `Enabled`
-- use `true` / `false`, nao valores como `\"true\"`, `\"false\"` ou typos como `fase`
-- para schedules, `Periods` e o formato preferido/oficial
-- `Start` e `Stop` continuam suportados para janelas simples e edicao manual no Portal
-
-Tag minima no recurso:
-
-```text
-schedule=business-hours
-```
-
 ## Quick Start
 
-1. Prepare o ambiente Python:
+Setup:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp infra/bicep/main.parameters.example.json infra/bicep/main.parameters.json
+az login
 ```
 
-2. Copie o arquivo de parametros:
+Deploy:
 
 ```bash
-cp infra/bicep/main.parameters.example.json infra/bicep/main.parameters.json
+./scripts/deploy_scheduler.sh --parameters-file infra/bicep/main.parameters.json
 ```
 
-3. Ajuste no `infra/bicep/main.parameters.json`:
+Parâmetros mínimos:
 
 - `resourceGroupName`
 - `location`
 - `namePrefix`
 - `subscriptionIds` ou `managementGroupIds`
-- `excludeSubscriptionIds` se necessario
-- `targetResourceLocations` se quiser filtro regional
-- `timerSchedule` se quiser sobrescrever o cron tecnico da Function
-- `tableOperatorsGroupObjectId` se quiser operar tabelas via Entra ID
 
-4. Faça login no Azure e selecione a subscription que deseja fazer deploy da solução:
+## Exemplo de Uso
 
-```bash
-az login
-```
-
-5. Execute o deploy completo:
-
-```bash
-./scripts/deploy_scheduler.sh \
-  --parameters-file infra/bicep/main.parameters.json
-```
-
-6. Marque uma VM com:
+Tag em uma VM:
 
 ```text
 schedule=business-hours
 ```
 
-7. Valide primeiro com `DRY_RUN=true`.
+Exemplo simples de schedule:
 
-## Desenvolvimento Local
-
-Rodar testes:
-
-```bash
-pytest -q
+```json
+{
+  "PartitionKey": "SCHEDULE",
+  "RowKey": "business-hours",
+  "Start": "08:00",
+  "Stop": "18:00",
+  "SkipDays": "saturday,sunday",
+  "Enabled": true,
+  "Version": "1",
+  "UpdatedAtUtc": "2026-03-19T12:00:00Z",
+  "UpdatedBy": "ops@example.com"
+}
 ```
 
-Preparar o host local:
+Formato preferido para janelas mais ricas:
 
-```bash
-cd function
-cp local.settings.json.example local.settings.json
-func start
+```json
+{
+  "PartitionKey": "SCHEDULE",
+  "RowKey": "office-hours-split",
+  "Periods": "[{\"start\":\"08:00\",\"stop\":\"12:00\"},{\"start\":\"13:00\",\"stop\":\"18:00\"}]",
+  "Enabled": true,
+  "Version": "1",
+  "UpdatedAtUtc": "2026-03-19T12:00:00Z",
+  "UpdatedBy": "ops@example.com"
+}
 ```
 
-Importante:
+## Casos de Uso
 
-- em execucao local, o app usa `AZURE_SUBSCRIPTION_IDS` diretamente
-- o bootstrap de `managementGroupIds` e `excludeSubscriptionIds` e resolvido pelo wrapper de deploy, nao pelo host local
+- Ambientes de desenvolvimento e sandbox com horários previsíveis
+- Ambientes enterprise com múltiplas subscriptions e governança centralizada
+- Iniciativas de FinOps focadas em reduzir custo de compute ocioso
 
-## Deploy
+## Funcionalidades
 
-Fluxo recomendado:
+- Schedules e configuração global orientados por tabela
+- Suporte a múltiplas subscriptions com escopo opcional por management group
+- Regras de include/exclude com precedência explícita de exclude
+- Retenção para respeitar override manual do operador
+- Filtro regional com `targetResourceLocations`
+- Timer técnico configurável com `TIMER_SCHEDULE`
+- Bootstrap padrão no primeiro deploy
+- Fluxo de deploy limpo com Bicep
 
-```bash
-./scripts/deploy_scheduler.sh \
-  --parameters-file infra/bicep/main.parameters.json
+## Observabilidade
+
+A solução já entrega visibilidade operacional por execução, sem exigir ferramentas adicionais para começar:
+
+- Correlation ID por execução via `run_id`
+- Tempo total do ciclo e tempo por recurso com `duration_sec`
+- Relatório final emitido como uma única linha JSON
+- Resultado estruturado por recurso com ação, status e motivo
+
+Exemplo de formato do relatório:
+
+```json
+{
+  "run_id": "...",
+  "timestamp": "...",
+  "dry_run": true,
+  "summary": {
+    "total": 2,
+    "started": 1,
+    "stopped": 0,
+    "skipped": 1
+  },
+  "duration_sec": 1.234,
+  "resources": []
+}
 ```
 
-Esse wrapper:
+## Objetivos de Design
 
-- valida pre-requisitos locais
-- resolve o escopo tecnico efetivo
-- valida o Bicep
-- executa o deploy
-- faz bootstrap das tabelas
-- prepara e publica a Function
+- Permitir mudanças operacionais sem depender de redeploy
+- Automatizar com segurança antes de automatizar com agressividade
+- Separar configuração técnica de runtime das regras do scheduler
+- Manter escopo explícito, auditável e governável
+- Entregar observabilidade útil sem adicionar infraestrutura extra
 
-Se voce usar `managementGroupIds` ou `excludeSubscriptionIds`, prefira sempre o wrapper em vez de rodar `az deployment sub create` diretamente.
+## Documentação
 
-Por padrao, o timer da Function executa a cada 15 minutos via `TIMER_SCHEDULE=0 */15 * * * *`.
+- Índice da documentação: [docs/README.md](docs/README.md)
+- Arquitetura: [docs/architecture.md](docs/architecture.md)
+- Exemplos: [docs/examples.md](docs/examples.md)
+- Guia de desenvolvimento: [docs/developer-guide.md](docs/developer-guide.md)
+- Componentes de código: [docs/code-components.md](docs/code-components.md)
+- Estrutura do repositório: [docs/repository-map.md](docs/repository-map.md)
+- Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
+- Política de release: [docs/release-policy.md](docs/release-policy.md)
 
-## Documentacao
+## Recursos Suportados
 
-- Indice da documentacao: `docs/README.md`
-- Arquitetura e fluxo completo: `docs/architecture.md`
-- Guia de desenvolvimento: `docs/developer-guide.md`
-- Estrutura do repositorio: `docs/repository-map.md`
-- Componentes de codigo: `docs/code-components.md`
-- Exemplos prontos: `docs/examples.md`
-- Troubleshooting: `docs/troubleshooting.md`
-- Politica de release e compatibilidade: `docs/release-policy.md`
+Hoje:
 
-## Comunidade
+- `Microsoft.Compute/virtualMachines`
 
-- Como contribuir: `CONTRIBUTING.md`
-- Codigo de conduta: `CODE_OF_CONDUCT.md`
-- Politica de seguranca: `SECURITY.md`
-- Licenca: `LICENSE`
+Roadmap:
 
-## Roadmap
+- `VirtualMachineScaleSets`
+- `App Services`
+- outros recursos elegíveis para estratégia off-hours
 
-- `1.0`: VM scheduler por tags com configuracao table-driven
-- proximo: novos tipos de recurso
-- proximo: regras mais avancadas de calendario
-- proximo: melhorias voltadas para FinOps e observabilidade
+## Princípios de Design
+
+- Dados operacionais ficam em tabelas, não no código
+- Configuração técnica de runtime fica separada das regras de negócio
+- Defaults seguros vêm primeiro, como `DRY_RUN=true`
+- Escopo deve ser explícito e auditável
+- A solução deve continuar simples de operar
+- Observabilidade deve crescer sem introduzir complexidade desnecessária
+
+## Contribuição
+
+- Guia de contribuição: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Código de conduta: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Política de segurança: [SECURITY.md](SECURITY.md)
+- Licença: [LICENSE](LICENSE)
+
+Versão atual:
+
+- `1.0.0`

@@ -127,6 +127,13 @@ def test_service_dry_run_counts_actions_without_executing() -> None:
 
     result = service.run(now_utc=now)
 
+    assert result.run_id == "unknown"
+    assert result.duration_sec >= 0
+    assert len(result.resources) == 1
+    assert result.resources[0].resource_id == resources[0].id
+    assert result.resources[0].action == "START"
+    assert result.resources[0].result == "DRY_RUN"
+    assert result.resources[0].duration_sec >= 0
     assert result.started == 1
     assert handler.started == 0
     assert handler.stopped == 0
@@ -379,3 +386,33 @@ def test_service_retain_stopped_skips_start_when_stopped_manually() -> None:
     assert result.started == 0
     assert result.skipped == 1
     assert handler.started == 0
+
+
+def test_service_propagates_run_id_into_run_result() -> None:
+    engine = _build_engine()
+    handler = FakeVmHandler()
+    registry = HandlerRegistry()
+    registry.register(handler.SUPPORTED_TYPES, handler)
+
+    resources = [
+        FakeResource(
+            id="/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-a",
+            name="vm-a",
+            type="microsoft.compute/virtualmachines",
+            subscription_id="sub-1",
+            resource_group="rg",
+            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
+        )
+    ]
+
+    service = SchedulerService(
+        engine=engine,
+        discovery=FakeDiscovery(resources),
+        registry=registry,
+        dry_run=True,
+        run_id="run-123",
+    )
+
+    result = service.run(now_utc=datetime(2026, 3, 5, 13, 0, tzinfo=ZoneInfo("UTC")))
+
+    assert result.run_id == "run-123"

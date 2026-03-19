@@ -16,7 +16,7 @@ rm -rf "$APP_DIR/.python_packages" "$APP_DIR/.pytest_cache"
 cp "$ROOT_REQUIREMENTS_FILE" "$FUNCTION_REQUIREMENTS_FILE"
 
 # Sync runtime modules from src/ into the function host folder.
-for module_dir in config discovery handlers persistence scheduler; do
+for module_dir in config discovery handlers persistence reporting scheduler; do
   rm -rf "$APP_DIR/$module_dir"
   cp -R "$SRC_DIR/$module_dir" "$APP_DIR/$module_dir"
   find "$APP_DIR/$module_dir" -type d -name "__pycache__" -prune -exec rm -rf {} +

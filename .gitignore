@@ -11,4 +11,5 @@ function/config/
 function/discovery/
 function/handlers/
 function/persistence/
+function/reporting/
 function/scheduler/
