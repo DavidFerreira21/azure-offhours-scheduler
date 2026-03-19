@@ -182,9 +182,10 @@ Exemplo de formato do relatório:
 - Índice da documentação: [docs/README.md](docs/README.md)
 - Arquitetura: [docs/architecture.md](docs/architecture.md)
 - Exemplos: [docs/examples.md](docs/examples.md)
+- Guia operacional: [docs/operator-guide.md](docs/operator-guide.md)
 - Guia de desenvolvimento: [docs/developer-guide.md](docs/developer-guide.md)
-- Componentes de código: [docs/code-components.md](docs/code-components.md)
 - Estrutura do repositório: [docs/repository-map.md](docs/repository-map.md)
+- Componentes de código: [docs/code-components.md](docs/code-components.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
 - Política de release: [docs/release-policy.md](docs/release-policy.md)
 

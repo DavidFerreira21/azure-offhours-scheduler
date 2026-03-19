@@ -40,9 +40,13 @@ Timer Trigger
   -> avalia cada recurso no engine
   -> chama o handler correto
   -> grava state quando necessario
+  -> monta relatorio estruturado
 ```
 
 ## 3. Estrutura do Repositorio
+
+Este guia assume que `repository-map.md` e a referencia curta para estrutura do repo.
+Aqui, o foco e manutencao e evolucao do comportamento da solucao.
 
 ### `function/`
 
@@ -76,20 +80,15 @@ Subpastas:
   Executa acoes por tipo de recurso.
 - `src/persistence/`
   Le e grava dados nas tabelas.
+- `src/reporting/`
+  Monta o relatorio estruturado final do ciclo.
 - `src/scheduler/`
   Modelos, engine e service.
 
-### `infra/bicep/`
+### `infra/bicep/`, `scripts/` e `tests/`
 
-Infraestrutura da solucao.
-
-### `scripts/`
-
-Automacao operacional e de publish.
-
-### `tests/`
-
-Cobertura unitária do comportamento principal.
+Essas areas sustentam deploy, publish e validacao automatizada.
+Use `repository-map.md` quando a duvida for "onde editar".
 
 ## 4. Fonte da Verdade
 
@@ -124,11 +123,14 @@ Quando o timer dispara:
 7. registra handlers
 8. cria `StateStore`
 9. roda `SchedulerService`
-10. escreve o resumo final em log
+10. monta o relatorio final do ciclo
+11. escreve o resumo final e o JSON estruturado em log
 
 Se voce precisar depurar o bootstrap, este e o melhor ponto de entrada.
 
 ## 6. O Que Cada Modulo Faz
+
+Use `code-components.md` se voce quiser uma visao mais modular e mais focada nas camadas do runtime.
 
 ### `src/config/settings.py`
 
@@ -146,6 +148,10 @@ Regra pratica:
 
 - se a configuracao muda sem redeploy, ela deve ir para tabela
 - se a configuracao descreve o ambiente tecnico da app, ela pode ficar aqui
+
+Observacao:
+
+- o cron tecnico do timer vem da app setting `TIMER_SCHEDULE`, resolvida pelo host da Function
 
 ### `src/persistence/config_store.py`
 
@@ -170,6 +176,11 @@ Responsabilidades:
 - descobrir se o recurso ja foi iniciado/parado pelo scheduler
 - registrar a ultima observacao
 - permitir regras `retain_running` e `retain_stopped`
+
+Detalhe importante:
+
+- `retain_running` e temporario no comportamento atual
+- `retain_stopped` continua persistente no comportamento atual
 
 Se o comportamento de retencao mudar, comece por aqui e pelo `SchedulerService`.
 
@@ -226,9 +237,18 @@ Responsabilidades:
 - lidar com `dry_run`
 - aplicar retencao
 - salvar state
-- consolidar resumo
+- propagar `run_id`
+- medir tempo do ciclo e tempo por recurso
+- consolidar resumo e resultados estruturados
 
 Se o engine responde "o que deveria acontecer", o service responde "como isso acontece no runtime".
+
+### `src/reporting/report_builder.py`
+
+Responsabilidades:
+
+- transformar o resultado final do scheduler em um payload JSON simples
+- manter o formato do relatorio desacoplado da orquestracao principal
 
 ### `src/handlers/`
 
@@ -386,8 +406,9 @@ atualize tambem:
 
 - `README.md`
 - `docs/architecture.md`
-- `docs/repository-map.md`
-- `docs/code-components.md`
+- `docs/operator-guide.md` se a mudanca afetar a operacao no Portal
+- `docs/repository-map.md` se a mudanca afetar a estrutura do repo
+- `docs/code-components.md` se a mudanca afetar responsabilidades de camadas
 - este `docs/developer-guide.md`
 
 ## 10. Como Ler o Projeto Pela Primeira Vez

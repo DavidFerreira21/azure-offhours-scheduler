@@ -72,6 +72,7 @@ O ambiente da Function guarda apenas configuracao tecnica:
 - `SCHEDULE_STORAGE_TABLE_NAME`
 - `STATE_STORAGE_TABLE_NAME`
 - `MAX_WORKERS`
+- `TIMER_SCHEDULE`
 
 Esses valores dizem onde executar e onde buscar a configuracao operacional. Eles nao definem regras de negocio.
 
@@ -224,7 +225,7 @@ Significado:
 - `DEFAULT_TIMEZONE`: fallback quando o recurso nao tem tag `timezone`
 - `SCHEDULE_TAG_KEY`: nome da tag que aponta para o schedule
 - `RETAIN_RUNNING`: preserva recurso ligado manualmente fora da janela de forma temporaria, ate atravessar a proxima janela valida
-- `RETAIN_STOPPED`: preserva recurso parado manualmente dentro da janela e permanece sticky ate nova intervencao ou mudanca de estado
+- `RETAIN_STOPPED`: preserva recurso parado manualmente dentro da janela e permanece persistente ate nova intervencao ou mudanca de estado
 - `Version`, `UpdatedAtUtc`, `UpdatedBy`: trilha minima de auditoria
 
 Exemplo:
@@ -406,9 +407,16 @@ Comportamentos:
 - se `RETAIN_RUNNING=true` e a VM estiver ligada fora da janela sem ter sido ligada pelo scheduler, o resultado e `SKIP_RETAIN_RUNNING`
 - quando essa mesma VM atravessa uma janela valida ainda ligada, o override temporario e consumido e ela volta ao ciclo automatico para o proximo periodo fora da janela
 - se `RETAIN_STOPPED=true` e a VM estiver parada dentro da janela sem ter sido parada pelo scheduler, o resultado e `SKIP_RETAIN_STOPPED`
-- `RETAIN_STOPPED` permanece sticky no comportamento atual
+- `RETAIN_STOPPED` permanece persistente no comportamento atual
 
 Isso evita que o scheduler desfaça uma decisao manual indevidamente.
+
+Cada ciclo tambem gera observabilidade estruturada:
+
+- `run_id` unico por execucao
+- `duration_sec` total do ciclo
+- `duration_sec` por recurso processado
+- relatorio final em uma unica linha JSON com `summary` e `resources`
 
 ### Etapa 11. Concorrencia
 

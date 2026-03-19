@@ -1,35 +1,37 @@
-# Documentation Index
+# Índice da Documentação
 
-Use this index to choose the right document based on what you need.
+Use este índice para encontrar rapidamente o documento certo para cada perfil de uso.
 
-## Start Here
+## Quero Entender o Projeto
 
 - `../README.md`
-  High-level overview, quick start, local development, and links.
-
-## Architecture and Operations
-
+  Visão geral do produto, proposta de valor, quick start e links principais.
 - `architecture.md`
-  End-to-end solution flow, runtime behavior, tables, and deploy model.
-- `examples.md`
-  Ready-to-use examples for tables, scope, tags, and configuration.
-- `troubleshooting.md`
-  Common local, deploy, and runtime issues.
+  Fluxo fim a fim da solução, comportamento do runtime, tabelas e modelo de deploy.
 
-## Development and Maintenance
+## Quero Operar no Azure
+
+- `operator-guide.md`
+  Guia operacional para editar config, criar schedules, aplicar tags e validar execuções.
+- `examples.md`
+  Exemplos prontos de entidades, tags, schedules e escopo.
+- `troubleshooting.md`
+  Problemas comuns de desenvolvimento local, deploy e runtime.
+
+## Quero Alterar o Código
 
 - `developer-guide.md`
-  Main guide for people who will change code, deploy, or maintain the project.
+  Guia principal para quem vai manter, evoluir, depurar e publicar o projeto.
 - `repository-map.md`
-  Explains the repository structure and where to edit each type of change.
+  Explica a estrutura do repositório e onde editar cada tipo de mudança.
 - `code-components.md`
-  Explains the runtime modules and responsibilities of each code layer.
+  Explica os módulos do runtime e a responsabilidade de cada camada de código.
 
-## Project Policies
+## Políticas do Projeto
 
 - `../CONTRIBUTING.md`
-  How to contribute and what maintainers expect in pull requests.
+  Como contribuir e o que os maintainers esperam nos pull requests.
 - `../SECURITY.md`
-  Security disclosure process and operational cautions.
+  Processo de reporte de segurança e cuidados operacionais.
 - `release-policy.md`
-  Release and compatibility expectations for contributors and adopters.
+  Política de release, compatibilidade e expectativas de mudança a partir da versão `1.0.0`.

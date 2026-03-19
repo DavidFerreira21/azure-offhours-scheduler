@@ -1,6 +1,9 @@
 # Componentes de Codigo
 
-Este documento descreve os componentes de codigo da solucao e o papel de cada camada do runtime.
+Este documento descreve os componentes de codigo do runtime e a responsabilidade de cada camada.
+
+Se voce quiser entender a estrutura do repositorio ou onde editar cada tipo de mudanca, use `repository-map.md`.
+Se voce quiser um guia de manutencao passo a passo, use `developer-guide.md`.
 
 ## Fluxo do Runtime
 
@@ -13,7 +16,9 @@ OffHoursTimer
   -> Handler Registry
   -> Resource Handlers
   -> State Store
-  -> Summary
+  -> SchedulerService
+  -> Report Builder
+  -> Structured Report
 ```
 
 ## 1. Entry Point da Azure Function
@@ -25,12 +30,14 @@ Arquivo:
 Responsabilidades:
 
 - receber o disparo do timer
+- gerar `run_id` para o ciclo
 - montar o `sys.path` para execucao local e em Azure
 - carregar `Settings.from_env()`
 - carregar configuracao global e schedules das tabelas
 - montar discovery, engine, registry e state store
 - instanciar `SchedulerService`
-- registrar o resumo final do ciclo
+- montar o relatorio final
+- registrar o resumo final e o JSON estruturado do ciclo
 
 Essa camada faz bootstrap. Ela nao concentra a logica principal de avaliacao.
 
@@ -49,6 +56,10 @@ Responsabilidades:
 - ler `MAX_WORKERS`
 
 O papel desse modulo e ler apenas configuracao tecnica do ambiente. A configuracao operacional continua vindo das tabelas.
+
+Observacao:
+
+- o cron tecnico do timer vem da app setting `TIMER_SCHEDULE`, resolvida pelo host da Function
 
 ## 3. Modelos do Dominio
 
@@ -116,7 +127,7 @@ Classes principais:
 
 Ponto importante:
 
-- o `RowKey` e derivado de hash do `resource.id`
+- o `RowKey` e derivado de hash do `resource.id` canonizado para evitar duplicidade por diferenca de casing ou barra final
 
 ## 5. Discovery
 
@@ -129,7 +140,8 @@ Responsabilidades:
 - consultar Azure Resource Graph
 - buscar apenas recursos suportados
 - exigir a tag de agendamento configurada
-- trazer `location`, `subscriptionId`, `resourceGroup`, `tags` e `managementGroupAncestorsChain`
+- trazer `location`, `subscriptionId`, `resourceGroup` e `tags`
+- resolver `managementGroupAncestorsChain` a partir de `ResourceContainers`
 - aplicar o filtro tecnico de `TARGET_RESOURCE_LOCATIONS`
 
 Componentes principais:
@@ -183,17 +195,42 @@ Responsabilidades:
 - aplicar regras de retencao
 - chamar `start()` ou `stop()`
 - persistir estado quando necessario
-- consolidar resumo do ciclo
+- medir duracao total e por recurso
+- propagar `run_id`
+- consolidar resumo e resultados estruturados do ciclo
 
 Estruturas principais:
 
 - `SchedulerSummary`
-- `ResourceOutcome`
+- `ActionOutcome`
+- `ResourceExecutionResult`
+- `SchedulerRunResult`
 - `SchedulerService`
 
 Esse arquivo e o orquestrador principal do runtime.
 
-## 8. Handlers por Tipo de Recurso
+## 8. Relatorio Estruturado
+
+Arquivo:
+
+- `src/reporting/report_builder.py`
+
+Responsabilidades:
+
+- transformar o resultado final do `SchedulerService` em um payload simples e serializavel
+- manter o formato do relatorio final estavel
+- separar a montagem do JSON final da logica do service
+
+Estrutura principal do payload:
+
+- `run_id`
+- `timestamp`
+- `dry_run`
+- `summary`
+- `duration_sec`
+- `resources`
+
+## 9. Handlers por Tipo de Recurso
 
 Arquivos:
 
@@ -226,7 +263,9 @@ Responsabilidades:
 - iniciar VM com `begin_start`
 - desligar VM com `begin_deallocate`
 
-## 9. Scripts Operacionais
+## 10. Scripts Operacionais
+
+Os scripts nao fazem parte do runtime principal, mas sustentam deploy, bootstrap e publish.
 
 Arquivos:
 
@@ -259,10 +298,12 @@ Responsabilidades:
 Responsabilidades:
 
 - limpar artefatos antigos do host
-- copiar `src/config`, `src/discovery`, `src/handlers`, `src/persistence` e `src/scheduler` para `function/`
+- copiar `src/config`, `src/discovery`, `src/handlers`, `src/persistence`, `src/reporting` e `src/scheduler` para `function/`
 - deixar o bundle pronto para publish
 
-## 10. Infraestrutura
+## 11. Infraestrutura
+
+Infraestrutura nao faz parte do codigo de negocio, mas define o ambiente tecnico em que o runtime executa.
 
 Arquivos:
 
@@ -298,7 +339,9 @@ Responsabilidades:
 
 Esses papeis sao aplicados por subscription no escopo efetivo resolvido pelo wrapper.
 
-## 11. Testes
+## 12. Testes
+
+Os testes refletem a divisao principal das camadas do runtime.
 
 Arquivos:
 
@@ -323,21 +366,6 @@ Distribuicao:
   regras do engine
 - `tests/test_scheduler_service.py`
   orquestracao e retencao
-
-## 12. Onde Alterar Cada Tipo de Mudanca
-
-Se a mudanca for:
-
-- regra de horario ou escopo:
-  altere `src/scheduler/engine.py` e `src/scheduler/models.py`
-- formato das entidades nas tabelas:
-  altere `src/persistence/config_store.py`
-- novo tipo de recurso:
-  crie handler em `src/handlers/` e registre no bootstrap da Function
-- nova variavel tecnica:
-  altere `src/config/settings.py` e `infra/bicep/modules/functionApp.bicep`
-- mudanca de deploy:
-  altere `infra/bicep/` e `scripts/deploy_scheduler.sh`
 
 ## Resumo
 

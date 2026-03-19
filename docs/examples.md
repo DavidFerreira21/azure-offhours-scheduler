@@ -10,7 +10,7 @@ Observacao importante:
 - para schedules, `Periods` e o formato preferido/oficial
 - `Start` e `Stop` continuam suportados como atalho para janelas simples e operacao manual no Portal
 - `RETAIN_RUNNING` e temporario no comportamento atual
-- `RETAIN_STOPPED` continua sticky no comportamento atual
+- `RETAIN_STOPPED` continua persistente no comportamento atual
 
 ## 1. Exemplo Minimo de Config Global
 

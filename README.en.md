@@ -181,6 +181,7 @@ Example report shape:
 
 - Documentation index: [docs/README.md](docs/README.md)
 - Architecture: [docs/architecture.md](docs/architecture.md)
+- Operator guide: [docs/operator-guide.md](docs/operator-guide.md)
 - Examples: [docs/examples.md](docs/examples.md)
 - Developer guide: [docs/developer-guide.md](docs/developer-guide.md)
 - Code components: [docs/code-components.md](docs/code-components.md)

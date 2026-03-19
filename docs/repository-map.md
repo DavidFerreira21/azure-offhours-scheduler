@@ -1,6 +1,6 @@
 # Mapa do Repositorio
 
-Este documento descreve a estrutura atual do repositorio, o papel de cada diretório e onde o time deve editar o codigo.
+Este documento descreve a estrutura atual do repositorio, a fonte da verdade de cada area e onde editar cada tipo de mudanca.
 
 ## Visao Geral
 
@@ -26,15 +26,22 @@ azure-offhours-scheduler
 
 ## Fonte da Verdade
 
-Os arquivos que devem ser editados no dia a dia ficam em:
+No dia a dia, a regra pratica e esta:
 
 - `src/`
+  Codigo da aplicacao.
+- `function/`
+  Host da Azure Function.
 - `infra/`
+  Infraestrutura e app settings.
 - `scripts/`
+  Automacao operacional.
 - `tests/`
+  Validacao automatizada.
 - `docs/`
+  Documentacao do projeto.
 
-O diretório `function/` contem o host da Azure Function e o ponto de entrada do timer. Durante o publish, ele tambem recebe uma copia dos modulos de `src/`.
+O diretório `function/` contem o host da Azure Function e o ponto de entrada do timer. Durante o publish, ele tambem recebe uma copia dos modulos de `src/`. Esses modulos copiados nao sao a fonte da verdade.
 
 Regra pratica:
 
@@ -45,7 +52,7 @@ Regra pratica:
 
 ### `function/`
 
-Contem o host da Azure Function.
+Contem apenas o host da Azure Function e o ponto de entrada do timer.
 
 Arquivos principais:
 
@@ -61,7 +68,7 @@ Arquivos principais:
 
 Observacao:
 
-- os modulos `config/`, `discovery/`, `handlers/`, `persistence/` e `scheduler/` nao ficam mais versionados dentro de `function/`
+- os modulos `config/`, `discovery/`, `handlers/`, `persistence/`, `reporting/` e `scheduler/` nao ficam mais versionados dentro de `function/`
 - eles sao copiados de `src/` por `scripts/prepare_function_app_publish.sh`
 - `function/requirements.txt` tambem e gerado por `scripts/prepare_function_app_publish.sh`, a partir do `requirements.txt` da raiz
 
@@ -79,6 +86,8 @@ Subdiretorios:
   Execucao por tipo de recurso.
 - `src/persistence/`
   Leitura e escrita em Azure Table Storage.
+- `src/reporting/`
+  Montagem do relatorio estruturado final.
 - `src/scheduler/`
   Modelos, engine e orquestracao do scheduler.
 
@@ -132,53 +141,31 @@ Arquivos principais:
   Testa a logica do engine.
 - `tests/test_scheduler_service.py`
   Testa a orquestracao do ciclo.
+- `tests/test_report_builder.py`
+  Testa o formato do relatorio estruturado.
+- `tests/test_state_store.py`
+  Testa a estabilidade da chave da tabela de state.
 
-## Fluxos de Manutencao
+## Onde Editar Cada Tipo de Mudanca
 
-### Mudar regra de negocio
+Se a mudanca for:
 
-Arquivos provaveis:
-
-- `src/scheduler/models.py`
-- `src/scheduler/engine.py`
-- `src/scheduler/service.py`
-- `tests/test_engine.py`
-- `tests/test_scheduler_service.py`
-
-### Mudar leitura das tabelas
-
-Arquivos provaveis:
-
-- `src/persistence/config_store.py`
-- `src/persistence/state_store.py`
-- `tests/test_config_store.py`
-
-### Adicionar novo tipo de recurso
-
-Arquivos provaveis:
-
-- `src/handlers/base_handler.py`
-- novo handler em `src/handlers/`
-- `src/handlers/registry.py`
-- possivelmente `src/discovery/resource_graph.py`
-
-### Mudar host da Function
-
-Arquivos provaveis:
-
-- `function/OffHoursTimer/__init__.py`
-- `function/OffHoursTimer/function.json`
-- `function/host.json`
-- `function/local.settings.json.example`
-
-### Mudar deploy
-
-Arquivos provaveis:
-
-- `infra/bicep/main.bicep`
-- `infra/bicep/modules/functionApp.bicep`
-- `infra/bicep/modules/subscriptionRoles.bicep`
-- `scripts/deploy_scheduler.sh`
+- regra de horario, escopo ou retencao:
+  edite `src/scheduler/` e os testes relacionados
+- formato das tabelas:
+  edite `src/persistence/`
+- discovery ou filtro tecnico:
+  edite `src/discovery/`
+- novo tipo de recurso:
+  edite `src/handlers/` e, se necessario, `src/discovery/`
+- host da Function:
+  edite `function/`
+- deploy e app settings:
+  edite `infra/bicep/` e `scripts/deploy_scheduler.sh`
+- bundle de publish:
+  edite `scripts/prepare_function_app_publish.sh`
+- documentacao:
+  edite `docs/` e `README.md`
 
 ## Regra de Trabalho
 
@@ -188,4 +175,4 @@ Se voce for alterar o comportamento do scheduler:
 2. atualize os testes em `tests/`
 3. rode `scripts/prepare_function_app_publish.sh` apenas quando precisar montar o bundle de publish
 
-Essa separacao evita duplicacao de codigo e deixa mais claro o que e host da Function e o que e codigo fonte da aplicacao.
+Essa separacao evita duplicacao de codigo e deixa claro o que e host da Function e o que e codigo fonte da aplicacao.
