@@ -4,6 +4,8 @@
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.12-blue.svg)
 
+English version: [README.en.md](README.en.md)
+
 **Desligue automaticamente recursos não produtivos fora do horário, de forma centralizada, auditável e segura.**
 
 Azure OffHours Scheduler é uma automação open source pronta para produção que reduz custo no Azure com schedules orientados por tabela, escopo controlado e execução segura.
