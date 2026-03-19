@@ -2,6 +2,16 @@
 
 Este documento traz exemplos prontos para uso em testes, operacao inicial e entendimento do modelo de tabelas.
 
+Observacao importante:
+
+- campos booleanos devem ser gravados como boolean quando possivel
+- use `true` / `false` para `DRY_RUN`, `RETAIN_RUNNING`, `RETAIN_STOPPED` e `Enabled`
+- evite texto livre em campos booleanos para nao quebrar a validacao operacional
+- para schedules, `Periods` e o formato preferido/oficial
+- `Start` e `Stop` continuam suportados como atalho para janelas simples e operacao manual no Portal
+- `RETAIN_RUNNING` e temporario no comportamento atual
+- `RETAIN_STOPPED` continua sticky no comportamento atual
+
 ## 1. Exemplo Minimo de Config Global
 
 Tabela:

@@ -23,6 +23,10 @@ Licenca:
 
 - Apache License 2.0
 
+Versao atual:
+
+- `1.0.0`
+
 ## O Que o Projeto Entrega
 
 - Azure Function com timer
@@ -52,6 +56,14 @@ Modelo de tabelas:
 - `OffHoursSchedulerSchedules`
 - `OffHoursSchedulerState`
 
+Observacao:
+
+- para campos booleanos nas tabelas, prefira boolean real em vez de texto
+- exemplos: `DRY_RUN`, `RETAIN_RUNNING`, `RETAIN_STOPPED`, `Enabled`
+- use `true` / `false`, nao valores como `\"true\"`, `\"false\"` ou typos como `fase`
+- para schedules, `Periods` e o formato preferido/oficial
+- `Start` e `Stop` continuam suportados para janelas simples e edicao manual no Portal
+
 Tag minima no recurso:
 
 ```text
@@ -65,7 +77,7 @@ schedule=business-hours
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 ```
 
 2. Copie o arquivo de parametros:
@@ -82,9 +94,10 @@ cp infra/bicep/main.parameters.example.json infra/bicep/main.parameters.json
 - `subscriptionIds` ou `managementGroupIds`
 - `excludeSubscriptionIds` se necessario
 - `targetResourceLocations` se quiser filtro regional
+- `timerSchedule` se quiser sobrescrever o cron tecnico da Function
 - `tableOperatorsGroupObjectId` se quiser operar tabelas via Entra ID
 
-4. Faça login no Azure:
+4. Faça login no Azure e selecione a subscription que deseja fazer deploy da solução:
 
 ```bash
 az login
@@ -146,6 +159,8 @@ Esse wrapper:
 
 Se voce usar `managementGroupIds` ou `excludeSubscriptionIds`, prefira sempre o wrapper em vez de rodar `az deployment sub create` diretamente.
 
+Por padrao, o timer da Function executa a cada 15 minutos via `TIMER_SCHEDULE=0 */15 * * * *`.
+
 ## Documentacao
 
 - Indice da documentacao: `docs/README.md`
@@ -166,7 +181,7 @@ Se voce usar `managementGroupIds` ou `excludeSubscriptionIds`, prefira sempre o 
 
 ## Roadmap
 
-- v1: VM scheduler por tags
-- v2: novos tipos de recurso
-- v3: regras mais avancadas de calendario
-- v4: melhorias voltadas para FinOps e observabilidade
+- `1.0`: VM scheduler por tags com configuracao table-driven
+- proximo: novos tipos de recurso
+- proximo: regras mais avancadas de calendario
+- proximo: melhorias voltadas para FinOps e observabilidade

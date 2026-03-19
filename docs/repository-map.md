@@ -52,6 +52,7 @@ Arquivos principais:
 - `function/OffHoursTimer/__init__.py`
   Bootstrap do runtime no timer trigger.
 - `function/OffHoursTimer/function.json`
+  Timer trigger que referencia `%TIMER_SCHEDULE%`.
   Definicao do timer trigger.
 - `function/host.json`
   Configuracao base do host Functions.

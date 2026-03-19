@@ -31,6 +31,9 @@
     "targetResourceLocations": {
       "value": []
     },
+    "timerSchedule": {
+      "value": "0 */15 * * * *"
+    },
     "maxWorkers": {
       "value": 5
     }

@@ -3,6 +3,7 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "python",
+    "TIMER_SCHEDULE": "0 */15 * * * *",
     "AZURE_SUBSCRIPTION_IDS": "<sub-id-1>,<sub-id-2>",
     "TARGET_RESOURCE_LOCATIONS": "",
     "SCHEDULER_STORAGE_CONNECTION_STRING": "UseDevelopmentStorage=true",

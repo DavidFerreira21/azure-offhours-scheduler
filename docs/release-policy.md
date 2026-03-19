@@ -17,9 +17,14 @@ Current real action support:
 
 ## Versioning Direction
 
-Until the project adopts a stable `1.0.0` release, minor breaking changes may
-still happen when they are necessary to improve the architecture, deploy model,
-or operational safety.
+The project baseline is now `1.0.0`.
+
+From `1.0.0` onward:
+
+- breaking changes should be exceptional and clearly announced
+- schema or behavior changes must include migration guidance
+- examples and operational docs should be updated in the same change
+- app settings, table schemas, and retain semantics should not change silently
 
 Maintainer expectation:
 
@@ -92,7 +97,10 @@ The project tries to preserve:
 
 - documented app settings
 - documented table names
-- the operational meaning of `DRY_RUN`, `RETAIN_RUNNING`, `RETAIN_STOPPED`
+- the operational meaning of `DRY_RUN`
+- the current retain semantics:
+  - `RETAIN_RUNNING` as a temporary manual override
+  - `RETAIN_STOPPED` as a sticky manual override
 
 If a change must break compatibility:
 

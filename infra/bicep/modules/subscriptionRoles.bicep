@@ -8,9 +8,10 @@ param assignmentSeed string
 
 var readerRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')
 var vmContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')
+var roleAssignmentSeed = guid(subscription().subscriptionId, assignmentSeed, principalId)
 
 resource readerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().subscriptionId, assignmentSeed, 'reader')
+  name: guid(roleAssignmentSeed, readerRoleDefinitionId)
   properties: {
     roleDefinitionId: readerRoleDefinitionId
     principalId: principalId
@@ -19,7 +20,7 @@ resource readerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 }
 
 resource vmContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(subscription().subscriptionId, assignmentSeed, 'vm-contributor')
+  name: guid(roleAssignmentSeed, vmContributorRoleDefinitionId)
   properties: {
     roleDefinitionId: vmContributorRoleDefinitionId
     principalId: principalId

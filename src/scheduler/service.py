@@ -91,6 +91,7 @@ class SchedulerService:
                     resource=resource,
                     handler=handler,
                     current_state=current_state,
+                    stored_state=stored_state,
                     started_by_scheduler=started_by_scheduler,
                     stopped_by_scheduler=stopped_by_scheduler,
                 )
@@ -148,15 +149,22 @@ class SchedulerService:
         resource,
         handler,
         current_state: str,
+        stored_state,
         started_by_scheduler: bool,
         stopped_by_scheduler: bool,
     ) -> ResourceOutcome:
         if current_state == "running":
+            retain_running_consumed = (
+                self.retain_running
+                and not started_by_scheduler
+                and stored_state is not None
+                and stored_state.last_action == "SKIP_RETAIN_RUNNING"
+            )
             logging.info("SKIP %s (already running)", resource.id)
             self._save_state(
                 resource=resource,
-                started_by_scheduler=started_by_scheduler,
-                stopped_by_scheduler=stopped_by_scheduler,
+                started_by_scheduler=True if retain_running_consumed else started_by_scheduler,
+                stopped_by_scheduler=False if retain_running_consumed else stopped_by_scheduler,
                 last_observed_state=current_state,
                 last_action="SKIP_ALREADY_RUNNING",
             )

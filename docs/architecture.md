@@ -179,7 +179,9 @@ Esses papeis sao atribuidos em cada subscription do escopo tecnico efetivo resol
 
 ### Etapa 2. Disparo do timer
 
-A Function `OffHoursTimer` executa no cron configurado em `function/OffHoursTimer/function.json`.
+A Function `OffHoursTimer` executa no cron configurado em `function/OffHoursTimer/function.json`, resolvido pela app setting tecnica `TIMER_SCHEDULE`.
+
+Por padrao, o deploy define `TIMER_SCHEDULE=0 */15 * * * *`, ou seja, uma execucao a cada 15 minutos.
 
 Cada disparo representa um ciclo completo de avaliacao.
 
@@ -221,8 +223,8 @@ Significado:
 - `DRY_RUN`: calcula e loga, sem executar `start/stop`
 - `DEFAULT_TIMEZONE`: fallback quando o recurso nao tem tag `timezone`
 - `SCHEDULE_TAG_KEY`: nome da tag que aponta para o schedule
-- `RETAIN_RUNNING`: preserva recurso ligado manualmente fora da janela
-- `RETAIN_STOPPED`: preserva recurso parado manualmente dentro da janela
+- `RETAIN_RUNNING`: preserva recurso ligado manualmente fora da janela de forma temporaria, ate atravessar a proxima janela valida
+- `RETAIN_STOPPED`: preserva recurso parado manualmente dentro da janela e permanece sticky ate nova intervencao ou mudanca de estado
 - `Version`, `UpdatedAtUtc`, `UpdatedBy`: trilha minima de auditoria
 
 Exemplo:
@@ -269,8 +271,9 @@ Campos suportados:
 
 Regras de interpretacao:
 
+- `Periods` e o formato preferido/oficial para modelar janelas operacionais
 - `Periods` permite multiplas janelas no mesmo schedule
-- `Start/Stop` continua valendo para janelas simples
+- `Start/Stop` continua valendo para janelas simples e compatibilidade com edicao manual no Portal
 - `Enabled=false` remove o schedule do ciclo sem apagar a entidade
 - `SkipDays` ignora o schedule em dias especificos
 
@@ -401,7 +404,9 @@ Comportamentos:
 - se a decisao for `START` e a VM ja estiver `running`, o resultado e `SKIP_ALREADY_RUNNING`
 - se a decisao for `STOP` e a VM ja estiver `stopped`, o resultado e `SKIP_ALREADY_STOPPED`
 - se `RETAIN_RUNNING=true` e a VM estiver ligada fora da janela sem ter sido ligada pelo scheduler, o resultado e `SKIP_RETAIN_RUNNING`
+- quando essa mesma VM atravessa uma janela valida ainda ligada, o override temporario e consumido e ela volta ao ciclo automatico para o proximo periodo fora da janela
 - se `RETAIN_STOPPED=true` e a VM estiver parada dentro da janela sem ter sido parada pelo scheduler, o resultado e `SKIP_RETAIN_STOPPED`
+- `RETAIN_STOPPED` permanece sticky no comportamento atual
 
 Isso evita que o scheduler desfaça uma decisao manual indevidamente.
 
@@ -585,8 +590,10 @@ Se o ciclo rodar as `20:00`:
 
 1. engine conclui `STOP`
 2. se a VM estiver ligada manualmente e `RETAIN_RUNNING=true`, o resultado vira `SKIP_RETAIN_RUNNING`
-3. caso contrario, o handler chama `deallocate`
-4. tabela `State` grava `LastAction=STOP`
+3. quando a VM atravessar a proxima janela valida ainda ligada, esse override temporario sera consumido
+4. no proximo ciclo fora da janela, a VM volta a ser elegivel para `STOP`
+5. caso contrario, o handler chama `deallocate`
+6. tabela `State` grava `LastAction=STOP`
 
 ## Extensibilidade
 

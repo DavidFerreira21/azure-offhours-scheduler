@@ -28,6 +28,9 @@
     "targetResourceLocations": {
       "value": []
     },
+    "timerSchedule": {
+      "value": "0 */15 * * * *"
+    },
     "configTableName": {
       "value": "OffHoursSchedulerConfig"
     },

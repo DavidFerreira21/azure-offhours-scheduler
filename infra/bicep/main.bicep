@@ -42,6 +42,9 @@ param targetResourceLocations array = []
 @description('Maximum scheduler workers for controlled parallelism.')
 param maxWorkers int = 5
 
+@description('Cron expression used by the OffHours timer trigger. Default runs every 15 minutes.')
+param timerSchedule string = '0 */15 * * * *'
+
 @description('Azure Table Storage table name used for global scheduler configuration.')
 param configTableName string = 'OffHoursSchedulerConfig'
 
@@ -87,6 +90,7 @@ module functionStack './modules/functionApp.bicep' = {
     excludeSubscriptionIds: excludeSubscriptionIds
     targetResourceLocations: targetResourceLocations
     maxWorkers: maxWorkers
+    timerSchedule: timerSchedule
     configTableName: configTableName
     scheduleTableName: scheduleTableName
     stateTableName: stateTableName

@@ -52,6 +52,7 @@ Arquivos principais:
 
 - `function/OffHoursTimer/__init__.py`
 - `function/OffHoursTimer/function.json`
+  Timer trigger com cron vindo de `TIMER_SCHEDULE`.
 - `function/host.json`
 - `function/local.settings.json.example`
 

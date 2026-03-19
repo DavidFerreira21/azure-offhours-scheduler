@@ -18,7 +18,10 @@ def _parse_bool(value: Any, field_name: str) -> bool:
             return True
         if normalized in {"0", "false", "no"}:
             return False
-    raise ValueError(f"{field_name} must be a boolean-compatible value")
+    raise ValueError(
+        f"{field_name} must be a boolean-compatible value. "
+        "Use true/false boolean values when editing table entities."
+    )
 
 
 def _parse_iso_datetime(value: Any, field_name: str) -> str:

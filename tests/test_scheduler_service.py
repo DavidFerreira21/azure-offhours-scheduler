@@ -298,6 +298,55 @@ def test_service_retain_running_stops_when_started_by_scheduler() -> None:
     assert handler.stopped == 1
 
 
+def test_service_retain_running_is_temporary_after_crossing_an_allowed_window() -> None:
+    engine = _build_engine()
+    handler = FakeVmHandler(state="running")
+    registry = HandlerRegistry()
+    registry.register(handler.SUPPORTED_TYPES, handler)
+    state_store = FakeStateStore(initial_started_by_scheduler=False)
+
+    resources = [
+        FakeResource(
+            id="/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-a",
+            name="vm-a",
+            type="microsoft.compute/virtualmachines",
+            subscription_id="sub-1",
+            resource_group="rg",
+            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
+        )
+    ]
+
+    service = SchedulerService(
+        engine=engine,
+        discovery=FakeDiscovery(resources),
+        registry=registry,
+        dry_run=False,
+        retain_running=True,
+        state_store=state_store,
+    )
+
+    outside_window = datetime(2026, 3, 5, 3, 0, tzinfo=ZoneInfo("UTC"))
+    inside_window = datetime(2026, 3, 5, 13, 0, tzinfo=ZoneInfo("UTC"))
+    outside_window_again = datetime(2026, 3, 6, 3, 0, tzinfo=ZoneInfo("UTC"))
+
+    first_result = service.run(now_utc=outside_window)
+    stored_after_first = state_store.state_by_resource_id[resources[0].id]
+    second_result = service.run(now_utc=inside_window)
+    stored_after_second = state_store.state_by_resource_id[resources[0].id]
+    third_result = service.run(now_utc=outside_window_again)
+
+    assert first_result.skipped == 1
+    assert stored_after_first.last_action == "SKIP_RETAIN_RUNNING"
+    assert stored_after_first.started_by_scheduler is False
+
+    assert second_result.skipped == 1
+    assert stored_after_second.last_action == "SKIP_ALREADY_RUNNING"
+    assert stored_after_second.started_by_scheduler is True
+
+    assert third_result.stopped == 1
+    assert handler.stopped == 1
+
+
 def test_service_retain_stopped_skips_start_when_stopped_manually() -> None:
     engine = _build_engine()
     handler = FakeVmHandler(state="stopped")

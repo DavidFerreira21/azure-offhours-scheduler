@@ -38,7 +38,15 @@ class ResourceGraphDiscovery:
 Resources
 | where tolower(type) == 'microsoft.compute/virtualmachines'
 | where isnotempty(tostring(tags['{escaped_key}']))
-| project id, name, type, location, subscriptionId, resourceGroup, tags, managementGroupAncestorsChain
+| project id, name, type, location, subscriptionId, resourceGroup, tags
+"""
+
+    @staticmethod
+    def _build_subscription_scope_query() -> str:
+        return """
+ResourceContainers
+| where type =~ 'microsoft.resources/subscriptions'
+| project subscriptionId, managementGroupAncestorsChain = properties.managementGroupAncestorsChain
 """
 
     def _build_client(self):
@@ -69,6 +77,23 @@ Resources
 
         return tuple(management_group_ids)
 
+    def _load_subscription_management_groups(self, client, request_factory) -> dict[str, tuple[str, ...]]:
+        request = request_factory(
+            subscriptions=self.subscription_ids,
+            query=self._build_subscription_scope_query(),
+        )
+        result = client.resources(request)
+
+        management_groups_by_subscription: dict[str, tuple[str, ...]] = {}
+        for row in result.data or []:
+            subscription_id = str(row.get("subscriptionId") or "").strip()
+            if not subscription_id:
+                continue
+
+            management_groups_by_subscription[subscription_id] = self._extract_management_group_ids(row)
+
+        return management_groups_by_subscription
+
     def find_scheduled_resources(self) -> list[ScheduledResource]:
         client = self._build_client()
 
@@ -79,6 +104,7 @@ Resources
 
             request_factory = QueryRequest
 
+        management_groups_by_subscription = self._load_subscription_management_groups(client, request_factory)
         request = request_factory(subscriptions=self.subscription_ids, query=self._build_query())
         result = client.resources(request)
 
@@ -97,7 +123,7 @@ Resources
                     subscription_id=row["subscriptionId"],
                     resource_group=row["resourceGroup"],
                     tags=row.get("tags") or {},
-                    management_group_ids=self._extract_management_group_ids(row),
+                    management_group_ids=management_groups_by_subscription.get(row["subscriptionId"], ()),
                 )
             )
         return resources

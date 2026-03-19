@@ -36,6 +36,9 @@ param targetResourceLocations array = []
 @description('Maximum scheduler workers for controlled parallelism.')
 param maxWorkers int = 5
 
+@description('Cron expression used by the OffHours timer trigger.')
+param timerSchedule string = '0 */15 * * * *'
+
 @description('Azure Table Storage table name used for global scheduler configuration.')
 param configTableName string = 'OffHoursSchedulerConfig'
 
@@ -284,6 +287,10 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         {
           name: 'TARGET_RESOURCE_LOCATIONS'
           value: join(targetResourceLocations, ',')
+        }
+        {
+          name: 'TIMER_SCHEDULE'
+          value: timerSchedule
         }
         {
           name: 'SCHEDULER_STORAGE_CONNECTION_STRING'

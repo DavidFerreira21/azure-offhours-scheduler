@@ -115,3 +115,25 @@ E valide em ordem:
 3. leitura da tabela de schedules
 4. discovery
 5. service
+
+## 11. A Function falha depois de eu editar a tabela manualmente
+
+Um caso comum e erro de tipo em campo booleano, por exemplo:
+
+- `DRY_RUN`
+- `RETAIN_RUNNING`
+- `RETAIN_STOPPED`
+- `Enabled`
+
+Use boolean real sempre que possivel:
+
+```json
+{
+  "DRY_RUN": false,
+  "RETAIN_RUNNING": false,
+  "RETAIN_STOPPED": false,
+  "Enabled": true
+}
+```
+
+Evite texto invalido, por exemplo `fase`, porque a validacao do runtime vai falhar no carregamento da entidade.

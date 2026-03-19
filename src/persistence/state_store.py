@@ -48,12 +48,24 @@ class AzureTableStateStore:
         return self._table_client
 
     @staticmethod
+    def _canonical_resource_id(resource) -> str:
+        resource_id = str(getattr(resource, "id", "") or "").strip()
+        if resource_id:
+            return resource_id.rstrip("/").lower()
+
+        subscription_id = str(getattr(resource, "subscription_id", "") or "").strip().lower()
+        resource_group = str(getattr(resource, "resource_group", "") or "").strip().lower()
+        resource_type = str(getattr(resource, "type", "") or "").strip().lower()
+        resource_name = str(getattr(resource, "name", "") or "").strip().lower()
+        return "|".join((subscription_id, resource_group, resource_type, resource_name))
+
+    @staticmethod
     def _partition_key(resource) -> str:
         return resource.subscription_id
 
-    @staticmethod
-    def _row_key(resource) -> str:
-        return hashlib.sha1(resource.id.encode("utf-8")).hexdigest()
+    @classmethod
+    def _row_key(cls, resource) -> str:
+        return hashlib.sha1(cls._canonical_resource_id(resource).encode("utf-8")).hexdigest()
 
     def get_state(self, resource) -> SchedulerState | None:
         from azure.core.exceptions import ResourceNotFoundError
@@ -92,6 +104,7 @@ class AzureTableStateStore:
             "PartitionKey": self._partition_key(resource),
             "RowKey": self._row_key(resource),
             "ResourceId": resource.id,
+            "CanonicalResourceId": self._canonical_resource_id(resource),
             "ResourceGroup": resource.resource_group,
             "ResourceName": resource.name,
             "ResourceType": resource.type,

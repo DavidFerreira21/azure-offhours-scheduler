@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "6775157335179162702"
+      "templateHash": "10880871643631458566"
     }
   },
   "parameters": {
@@ -103,6 +103,13 @@
       "defaultValue": 5,
       "metadata": {
         "description": "Maximum scheduler workers for controlled parallelism."
+      }
+    },
+    "timerSchedule": {
+      "type": "string",
+      "defaultValue": "0 */15 * * * *",
+      "metadata": {
+        "description": "Cron expression used by the OffHours timer trigger. Default runs every 15 minutes."
       }
     },
     "configTableName": {
@@ -205,6 +212,9 @@
           "maxWorkers": {
             "value": "[parameters('maxWorkers')]"
           },
+          "timerSchedule": {
+            "value": "[parameters('timerSchedule')]"
+          },
           "configTableName": {
             "value": "[parameters('configTableName')]"
           },
@@ -228,7 +238,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "9711255497913304743"
+              "templateHash": "15473158080701548006"
             }
           },
           "parameters": {
@@ -307,6 +317,13 @@
               "defaultValue": 5,
               "metadata": {
                 "description": "Maximum scheduler workers for controlled parallelism."
+              }
+            },
+            "timerSchedule": {
+              "type": "string",
+              "defaultValue": "0 */15 * * * *",
+              "metadata": {
+                "description": "Cron expression used by the OffHours timer trigger."
               }
             },
             "configTableName": {
@@ -549,6 +566,10 @@
                       "value": "[join(parameters('targetResourceLocations'), ',')]"
                     },
                     {
+                      "name": "TIMER_SCHEDULE",
+                      "value": "[parameters('timerSchedule')]"
+                    },
+                    {
                       "name": "SCHEDULER_STORAGE_CONNECTION_STRING",
                       "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
                     },
@@ -644,7 +665,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "5544756359354056270"
+              "templateHash": "894980328902359599"
             }
           },
           "parameters": {
@@ -663,13 +684,14 @@
           },
           "variables": {
             "readerRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]",
-            "vmContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')]"
+            "vmContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '9980e02c-c2be-4d73-94e8-173b1dc7cf3c')]",
+            "roleAssignmentSeed": "[guid(subscription().subscriptionId, parameters('assignmentSeed'), parameters('principalId'))]"
           },
           "resources": [
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "name": "[guid(subscription().subscriptionId, parameters('assignmentSeed'), 'reader')]",
+              "name": "[guid(variables('roleAssignmentSeed'), variables('readerRoleDefinitionId'))]",
               "properties": {
                 "roleDefinitionId": "[variables('readerRoleDefinitionId')]",
                 "principalId": "[parameters('principalId')]",
@@ -679,7 +701,7 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "name": "[guid(subscription().subscriptionId, parameters('assignmentSeed'), 'vm-contributor')]",
+              "name": "[guid(variables('roleAssignmentSeed'), variables('vmContributorRoleDefinitionId'))]",
               "properties": {
                 "roleDefinitionId": "[variables('vmContributorRoleDefinitionId')]",
                 "principalId": "[parameters('principalId')]",
