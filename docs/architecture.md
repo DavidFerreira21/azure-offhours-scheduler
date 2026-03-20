@@ -446,6 +446,26 @@ Ao final do ciclo, a Function publica um resumo com:
 - timezone padrao
 - tag key usada
 - flags de retencao
+- `run_id`
+- `duration_sec`
+- configuracao de logs tecnicos do runtime
+
+Em paralelo, a solucao publica:
+
+- um relatorio final em JSON para todo ciclo
+- logs estruturados por recurso quando o modo configurado permitir
+
+Modo recomendado para uso normal:
+
+- `ENABLE_VERBOSE_AZURE_SDK_LOGS=false`
+- `RESOURCE_RESULT_LOG_MODE=executed-and-errors`
+
+Efeito pratico desse modo:
+
+- o relatorio final do ciclo continua sempre
+- o resumo textual do ciclo continua sempre
+- logs por recurso ficam restritos a `EXECUTED` e `FAILED`
+- `SKIPPED` e `DRY_RUN` nao geram volume por recurso no modo padrao
 
 ## Modelo das Tabelas
 

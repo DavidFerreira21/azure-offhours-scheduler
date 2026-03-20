@@ -163,7 +163,7 @@ O relatorio final de cada execucao traz:
 - `duration_sec`
 - `resources`
 
-Cada recurso processado informa:
+Cada recurso processado pode informar:
 
 - `resource_id`
 - `name`
@@ -172,6 +172,13 @@ Cada recurso processado informa:
 - `result`
 - `reason`
 - `duration_sec`
+
+No modo recomendado de producao:
+
+- o relatorio final do ciclo continua sempre
+- o resumo textual do ciclo continua sempre
+- logs por recurso aparecem apenas para `EXECUTED` e `FAILED`
+- para troubleshooting detalhado, troque `RESOURCE_RESULT_LOG_MODE` para `all`
 
 ## 8. Validacao Segura Recomendada
 

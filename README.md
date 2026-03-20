@@ -148,8 +148,10 @@ A solução já entrega visibilidade operacional por execução, sem exigir ferr
 
 - Correlation ID por execução via `run_id`
 - Tempo total do ciclo e tempo por recurso com `duration_sec`
-- Relatório final emitido como uma única linha JSON
+- Relatório final emitido como uma única linha JSON em todo ciclo
 - Resultado estruturado por recurso com ação, status e motivo
+- Em produção, o padrão recomendado é `RESOURCE_RESULT_LOG_MODE=executed-and-errors`
+- Logs verbosos de request/response do SDK Azure ficam desabilitados por padrão
 
 Exemplo de formato do relatório:
 

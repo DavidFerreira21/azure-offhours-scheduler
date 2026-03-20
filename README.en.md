@@ -148,8 +148,10 @@ The solution already provides execution-level operational visibility without req
 
 - Correlation ID per run through `run_id`
 - Total cycle timing and per-resource `duration_sec`
-- Final report emitted as a single JSON line
+- Final report emitted as a single JSON line on every cycle
 - Structured per-resource outcome with action, result, and reason
+- Recommended production default is `RESOURCE_RESULT_LOG_MODE=executed-and-errors`
+- Verbose Azure SDK request/response logs are disabled by default
 
 Example report shape:
 

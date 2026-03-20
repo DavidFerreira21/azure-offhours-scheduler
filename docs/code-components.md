@@ -54,6 +54,8 @@ Responsabilidades:
 - ler connection string das tabelas
 - ler nomes das tabelas
 - ler `MAX_WORKERS`
+- ler `ENABLE_VERBOSE_AZURE_SDK_LOGS`
+- ler `RESOURCE_RESULT_LOG_MODE`
 
 O papel desse modulo e ler apenas configuracao tecnica do ambiente. A configuracao operacional continua vindo das tabelas.
 
@@ -198,6 +200,7 @@ Responsabilidades:
 - medir duracao total e por recurso
 - propagar `run_id`
 - consolidar resumo e resultados estruturados do ciclo
+- aplicar a politica de emissao de logs estruturados por recurso
 
 Estruturas principais:
 

@@ -153,6 +153,7 @@ Observacao:
 
 - o cron tecnico do timer vem da app setting `TIMER_SCHEDULE`, resolvida pelo host da Function
 - os logs estruturados por recurso sao controlados pela app setting `RESOURCE_RESULT_LOG_MODE`
+- os logs verbosos do SDK Azure sao controlados pela app setting `ENABLE_VERBOSE_AZURE_SDK_LOGS`
 
 ### `src/persistence/config_store.py`
 
@@ -241,6 +242,7 @@ Responsabilidades:
 - propagar `run_id`
 - medir tempo do ciclo e tempo por recurso
 - consolidar resumo e resultados estruturados
+- respeitar a politica de logs por recurso definida em `RESOURCE_RESULT_LOG_MODE`
 
 Se o engine responde "o que deveria acontecer", o service responde "como isso acontece no runtime".
 
