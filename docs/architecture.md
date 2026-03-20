@@ -72,6 +72,8 @@ O ambiente da Function guarda apenas configuracao tecnica:
 - `SCHEDULE_STORAGE_TABLE_NAME`
 - `STATE_STORAGE_TABLE_NAME`
 - `MAX_WORKERS`
+- `ENABLE_VERBOSE_AZURE_SDK_LOGS`
+- `RESOURCE_RESULT_LOG_MODE`
 - `TIMER_SCHEDULE`
 
 Esses valores dizem onde executar e onde buscar a configuracao operacional. Eles nao definem regras de negocio.
@@ -80,6 +82,8 @@ Leitura pratica:
 
 - `AZURE_SUBSCRIPTION_IDS`: escopo tecnico efetivo ja resolvido pelo wrapper de deploy
 - `DECLARED_MANAGEMENT_GROUP_IDS` e `DECLARED_EXCLUDE_SUBSCRIPTION_IDS`: metadados do escopo originalmente informado no `main.parameters.json`
+- `ENABLE_VERBOSE_AZURE_SDK_LOGS`: deve permanecer `false` no uso normal para evitar custo e volume excessivo de logs
+- `RESOURCE_RESULT_LOG_MODE`: use `executed-and-errors` no uso normal e `all` apenas para troubleshooting
 
 ### 3. Tabelas Operacionais
 

@@ -55,6 +55,23 @@ def _read_max_workers() -> int:
         raise ValueError("MAX_WORKERS must be an integer") from error
 
 
+def _read_bool_env(name: str, default_value: bool = False) -> bool:
+    raw_value = os.getenv(name, str(default_value)).strip().lower()
+    if raw_value in {"true", "1", "yes", "y", "on"}:
+        return True
+    if raw_value in {"false", "0", "no", "n", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean")
+
+
+def _read_resource_result_log_mode() -> str:
+    raw_value = os.getenv("RESOURCE_RESULT_LOG_MODE", "executed-and-errors").strip().lower()
+    allowed_values = {"executed-and-errors", "all"}
+    if raw_value not in allowed_values:
+        raise ValueError("RESOURCE_RESULT_LOG_MODE must be one of: executed-and-errors, all")
+    return raw_value
+
+
 @dataclass(frozen=True)
 class Settings:
     subscription_ids: list[str]
@@ -64,6 +81,8 @@ class Settings:
     schedule_storage_table_name: str
     state_storage_table_name: str
     max_workers: int
+    enable_verbose_azure_sdk_logs: bool
+    resource_result_log_mode: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -78,4 +97,6 @@ class Settings:
             ),
             state_storage_table_name=_read_table_name("STATE_STORAGE_TABLE_NAME", "OffHoursSchedulerState"),
             max_workers=_read_max_workers(),
+            enable_verbose_azure_sdk_logs=_read_bool_env("ENABLE_VERBOSE_AZURE_SDK_LOGS", default_value=False),
+            resource_result_log_mode=_read_resource_result_log_mode(),
         )

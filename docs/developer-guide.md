@@ -152,6 +152,7 @@ Regra pratica:
 Observacao:
 
 - o cron tecnico do timer vem da app setting `TIMER_SCHEDULE`, resolvida pelo host da Function
+- os logs estruturados por recurso sao controlados pela app setting `RESOURCE_RESULT_LOG_MODE`
 
 ### `src/persistence/config_store.py`
 

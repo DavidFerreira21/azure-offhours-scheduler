@@ -36,6 +36,16 @@ param targetResourceLocations array = []
 @description('Maximum scheduler workers for controlled parallelism.')
 param maxWorkers int = 5
 
+@description('When true, enables verbose Azure SDK request/response logs.')
+param enableVerboseAzureSdkLogs bool = false
+
+@description('Controls structured resource-result logs.')
+@allowed([
+  'executed-and-errors'
+  'all'
+])
+param resourceResultLogMode string = 'executed-and-errors'
+
 @description('Cron expression used by the OffHours timer trigger.')
 param timerSchedule string = '0 */15 * * * *'
 
@@ -287,6 +297,14 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         {
           name: 'TARGET_RESOURCE_LOCATIONS'
           value: join(targetResourceLocations, ',')
+        }
+        {
+          name: 'ENABLE_VERBOSE_AZURE_SDK_LOGS'
+          value: toLower(string(enableVerboseAzureSdkLogs))
+        }
+        {
+          name: 'RESOURCE_RESULT_LOG_MODE'
+          value: resourceResultLogMode
         }
         {
           name: 'TIMER_SCHEDULE'

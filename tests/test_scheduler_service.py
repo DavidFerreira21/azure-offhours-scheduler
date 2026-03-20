@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -270,6 +271,82 @@ def test_service_without_retain_running_stops_when_running_outside_window() -> N
 
     assert result.stopped == 1
     assert handler.stopped == 1
+
+
+def test_service_logs_only_executed_and_failed_resource_results_by_default(caplog) -> None:
+    engine = _build_engine()
+    success_handler = FakeVmHandler(state="running")
+    registry = HandlerRegistry()
+    registry.register(success_handler.SUPPORTED_TYPES, success_handler)
+
+    resources = [
+        FakeResource(
+            id="/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-skip",
+            name="vm-skip",
+            type="microsoft.compute/virtualmachines",
+            subscription_id="sub-1",
+            resource_group="rg",
+            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
+        )
+    ]
+
+    now = datetime(2026, 3, 5, 13, 0, tzinfo=ZoneInfo("UTC"))
+    service = SchedulerService(
+        engine=engine,
+        discovery=FakeDiscovery(resources),
+        registry=registry,
+        dry_run=False,
+        state_store=FakeStateStore(),
+    )
+
+    with caplog.at_level("INFO"):
+        service.run(now_utc=now)
+
+    resource_logs = [
+        record.message
+        for record in caplog.records
+        if '"event": "resource_result"' in record.message
+    ]
+    assert resource_logs == []
+
+
+def test_service_logs_all_resource_results_when_mode_is_all(caplog) -> None:
+    engine = _build_engine()
+    handler = FakeVmHandler(state="running")
+    registry = HandlerRegistry()
+    registry.register(handler.SUPPORTED_TYPES, handler)
+
+    resources = [
+        FakeResource(
+            id="/subscriptions/sub-1/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-skip",
+            name="vm-skip",
+            type="microsoft.compute/virtualmachines",
+            subscription_id="sub-1",
+            resource_group="rg",
+            tags={"schedule": "office-hours", "timezone": "America/Sao_Paulo"},
+        )
+    ]
+
+    now = datetime(2026, 3, 5, 13, 0, tzinfo=ZoneInfo("UTC"))
+    service = SchedulerService(
+        engine=engine,
+        discovery=FakeDiscovery(resources),
+        registry=registry,
+        dry_run=False,
+        state_store=FakeStateStore(),
+        resource_result_log_mode="all",
+    )
+
+    with caplog.at_level("INFO"):
+        service.run(now_utc=now)
+
+    resource_logs = [
+        json.loads(record.message)
+        for record in caplog.records
+        if '"event": "resource_result"' in record.message
+    ]
+    assert len(resource_logs) == 1
+    assert resource_logs[0]["result"] == "SKIPPED"
 
 
 def test_service_retain_running_stops_when_started_by_scheduler() -> None:

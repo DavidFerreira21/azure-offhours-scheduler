@@ -25,6 +25,13 @@ Recursos principais no Azure:
 - Azure Table Storage
   Guarda config global, schedules e state.
 
+Configuracao tecnica importante na Function App:
+
+- `ENABLE_VERBOSE_AZURE_SDK_LOGS`
+  Deve permanecer `false` no uso normal. Ative apenas para troubleshooting temporario.
+- `RESOURCE_RESULT_LOG_MODE`
+  O valor recomendado e `executed-and-errors`. Use `all` apenas quando precisar investigar recurso por recurso.
+
 Tabelas principais:
 
 - `OffHoursSchedulerConfig`

@@ -28,6 +28,12 @@
     "targetResourceLocations": {
       "value": []
     },
+    "enableVerboseAzureSdkLogs": {
+      "value": false
+    },
+    "resourceResultLogMode": {
+      "value": "executed-and-errors"
+    },
     "timerSchedule": {
       "value": "0 */15 * * * *"
     },

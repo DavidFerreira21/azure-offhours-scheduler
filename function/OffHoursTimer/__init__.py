@@ -36,12 +36,27 @@ from scheduler.engine import ScheduleEngine
 from scheduler.service import SchedulerService
 
 
+def _configure_sdk_logging(enable_verbose_azure_sdk_logs: bool) -> None:
+    sdk_logger_names = (
+        "azure",
+        "azure.core",
+        "azure.identity",
+        "azure.mgmt",
+        "azure.storage",
+        "azure.core.pipeline.policies.http_logging_policy",
+    )
+    target_level = logging.INFO if enable_verbose_azure_sdk_logs else logging.WARNING
+    for logger_name in sdk_logger_names:
+        logging.getLogger(logger_name).setLevel(target_level)
+
+
 def main(timer: func.TimerRequest) -> None:
     run_id = str(uuid.uuid4())
     if timer.past_due:
         logging.warning("[run_id=%s] Timer is past due", run_id)
 
     settings = Settings.from_env()
+    _configure_sdk_logging(settings.enable_verbose_azure_sdk_logs)
     global_config = AzureTableGlobalConfigStore(
         connection_string=settings.table_storage_connection_string,
         table_name=settings.config_storage_table_name,
@@ -83,6 +98,7 @@ def main(timer: func.TimerRequest) -> None:
         max_workers=settings.max_workers,
         state_store=state_store,
         run_id=run_id,
+        resource_result_log_mode=settings.resource_result_log_mode,
     )
     run_result = service.run()
     report = build_execution_report(run_result)
@@ -92,6 +108,7 @@ def main(timer: func.TimerRequest) -> None:
             "[run_id=%s] Cycle finished: total=%s started=%s stopped=%s skipped=%s "
             "dry_run=%s default_timezone=%s schedule_tag_key=%s "
             "retain_running=%s retain_stopped=%s max_workers=%s duration_sec=%s "
+            "verbose_azure_sdk_logs=%s resource_result_log_mode=%s "
             "state_table=%s target_resource_locations=%s"
         ),
         run_id,
@@ -106,6 +123,8 @@ def main(timer: func.TimerRequest) -> None:
         global_config.retain_stopped,
         settings.max_workers,
         run_result.duration_sec,
+        settings.enable_verbose_azure_sdk_logs,
+        settings.resource_result_log_mode,
         settings.state_storage_table_name,
         ",".join(settings.target_resource_locations) or "<all>",
     )

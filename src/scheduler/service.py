@@ -83,6 +83,7 @@ class SchedulerService:
         max_workers: int = 5,
         state_store=None,
         run_id: str = "",
+        resource_result_log_mode: str = "executed-and-errors",
     ) -> None:
         self.engine = engine
         self.discovery = discovery
@@ -94,6 +95,7 @@ class SchedulerService:
         self.max_workers = max(1, max_workers)
         self.state_store = state_store or NoopStateStore()
         self.run_id = run_id or "unknown"
+        self.resource_result_log_mode = resource_result_log_mode
 
     def run(self, now_utc: datetime | None = None) -> SchedulerRunResult:
         started_at = datetime.now(timezone.utc)
@@ -219,6 +221,8 @@ class SchedulerService:
         logging.exception("[run_id=%s] " + message, self.run_id, *args)
 
     def _log_structured_resource_result(self, resource_result: ResourceExecutionResult) -> None:
+        if not self._should_log_resource_result(resource_result):
+            return
         logging.info(
             json.dumps(
                 {
@@ -235,6 +239,11 @@ class SchedulerService:
                 sort_keys=True,
             )
         )
+
+    def _should_log_resource_result(self, resource_result: ResourceExecutionResult) -> bool:
+        if self.resource_result_log_mode == "all":
+            return True
+        return resource_result.result in {"EXECUTED", "FAILED"}
 
     def _build_resource_result(
         self,

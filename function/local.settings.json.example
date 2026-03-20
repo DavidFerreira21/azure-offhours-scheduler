@@ -6,6 +6,8 @@
     "TIMER_SCHEDULE": "0 */15 * * * *",
     "AZURE_SUBSCRIPTION_IDS": "<sub-id-1>,<sub-id-2>",
     "TARGET_RESOURCE_LOCATIONS": "",
+    "ENABLE_VERBOSE_AZURE_SDK_LOGS": "false",
+    "RESOURCE_RESULT_LOG_MODE": "executed-and-errors",
     "SCHEDULER_STORAGE_CONNECTION_STRING": "UseDevelopmentStorage=true",
     "CONFIG_STORAGE_TABLE_NAME": "OffHoursSchedulerConfig",
     "SCHEDULE_STORAGE_TABLE_NAME": "OffHoursSchedulerSchedules",

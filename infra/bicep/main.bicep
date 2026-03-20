@@ -42,6 +42,16 @@ param targetResourceLocations array = []
 @description('Maximum scheduler workers for controlled parallelism.')
 param maxWorkers int = 5
 
+@description('When true, enables verbose Azure SDK request/response logs. Keep false in normal production use.')
+param enableVerboseAzureSdkLogs bool = false
+
+@description('Controls structured resource-result logs. Use executed-and-errors for normal production use and all for troubleshooting.')
+@allowed([
+  'executed-and-errors'
+  'all'
+])
+param resourceResultLogMode string = 'executed-and-errors'
+
 @description('Cron expression used by the OffHours timer trigger. Default runs every 15 minutes.')
 param timerSchedule string = '0 */15 * * * *'
 
@@ -90,6 +100,8 @@ module functionStack './modules/functionApp.bicep' = {
     excludeSubscriptionIds: excludeSubscriptionIds
     targetResourceLocations: targetResourceLocations
     maxWorkers: maxWorkers
+    enableVerboseAzureSdkLogs: enableVerboseAzureSdkLogs
+    resourceResultLogMode: resourceResultLogMode
     timerSchedule: timerSchedule
     configTableName: configTableName
     scheduleTableName: scheduleTableName
