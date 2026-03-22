@@ -33,7 +33,10 @@ Fluxo esperado:
 1. alterar codigo em `src/`
 2. atualizar testes
 3. rodar `pytest -q`
-4. rodar `./scripts/prepare_function_app_publish.sh` se a mudanca impactar publish
+4. rodar `ruff check .`
+5. rodar `bandit -q -r src function -c pyproject.toml`
+6. rodar `pip-audit --local --progress-spinner off`
+7. rodar `./scripts/prepare_function_app_publish.sh` se a mudanca impactar publish
 
 ## Tipos de Contribuicao Bem-vindos
 
@@ -87,7 +90,10 @@ Checklist recomendado no PR:
 
 - [ ] codigo atualizado em `src/` quando aplicavel
 - [ ] testes atualizados
+- [ ] `ruff check .` executado
 - [ ] `pytest -q` executado
+- [ ] `bandit -q -r src function -c pyproject.toml` executado
+- [ ] `pip-audit --local --progress-spinner off` executado
 - [ ] docs atualizadas quando necessario
 - [ ] `prepare_function_app_publish.sh` validado se a mudanca impacta publish
 - [ ] Bicep recompilado se houve mudanca em `infra/bicep/main.bicep`
@@ -98,6 +104,24 @@ Rodar suite unitária:
 
 ```bash
 pytest -q
+```
+
+Rodar lint:
+
+```bash
+ruff check .
+```
+
+Rodar SAST:
+
+```bash
+bandit -q -r src function -c pyproject.toml
+```
+
+Rodar audit de dependências:
+
+```bash
+pip-audit --local --progress-spinner off
 ```
 
 Validar bundle da Function:

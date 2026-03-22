@@ -84,6 +84,9 @@ Contribuidores devem atualizar dependências no arquivo da raiz e validar:
 
 Mudanças não devem quebrar:
 
+- `ruff check .`
+- `bandit -q -r src function -c pyproject.toml`
+- `pip-audit --local --progress-spinner off`
 - `pytest -q`
 - validação sintática dos scripts shell
 - compilação do Bicep

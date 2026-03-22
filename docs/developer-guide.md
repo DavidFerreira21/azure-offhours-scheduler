@@ -333,6 +333,14 @@ Arquivos provaveis:
 pytest -q
 ```
 
+### Rodar lint e checagens de seguranca
+
+```bash
+ruff check .
+bandit -q -r src function -c pyproject.toml
+pip-audit --local --progress-spinner off
+```
+
 ### Preparar bundle da Function
 
 ```bash
@@ -434,7 +442,10 @@ Essa ordem ajuda a entender primeiro o fluxo, depois a estrutura, depois a imple
 
 - o codigo foi alterado em `src/` quando aplicavel
 - os testes relevantes foram atualizados
+- `ruff check .` passou
 - `pytest -q` passou
+- `bandit -q -r src function -c pyproject.toml` passou
+- `pip-audit --local --progress-spinner off` passou
 - `prepare_function_app_publish.sh` continua funcionando
 - a documentacao foi revisada
 - se houve mudanca de deploy, o Bicep foi recompilado

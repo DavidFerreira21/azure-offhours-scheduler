@@ -218,6 +218,7 @@ Roadmap:
 - Código de conduta: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - Política de segurança: [SECURITY.md](SECURITY.md)
 - Licença: [LICENSE](LICENSE)
+- A CI valida lint, SAST, audit de dependências, testes, scripts shell e compilação do Bicep
 
 Versão atual:
 

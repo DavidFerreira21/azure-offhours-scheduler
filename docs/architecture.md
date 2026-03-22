@@ -169,6 +169,7 @@ Esse wrapper executa um preflight antes do deploy:
 - executa `az deployment sub validate` antes do create
 
 Depois disso, ele executa o deploy da infra, aplica o bootstrap das tabelas e publica a Function App no final.
+No estado atual, esse publish usa `func azure functionapp publish --python --build remote`.
 
 Observacao importante:
 

@@ -218,6 +218,7 @@ Roadmap:
 - Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - Security policy: [SECURITY.md](SECURITY.md)
 - License: [LICENSE](LICENSE)
+- CI validates lint, SAST, dependency audit, tests, shell scripts, and Bicep compilation
 
 Current version:
 
