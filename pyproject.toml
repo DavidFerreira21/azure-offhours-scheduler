@@ -17,3 +17,6 @@ line-ending = "lf"
 
 [tool.ruff.lint.per-file-ignores]
 "function/OffHoursTimer/__init__.py" = ["E402"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "function/.python_packages", ".venv"]

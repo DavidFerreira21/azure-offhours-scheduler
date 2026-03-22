@@ -28,6 +28,12 @@ jobs:
       - name: Run Ruff lint
         run: ruff check .
 
+      - name: Run Bandit SAST
+        run: bandit -q -r src function -c pyproject.toml
+
+      - name: Run dependency vulnerability audit
+        run: pip-audit --local --progress-spinner off
+
       - name: Run tests
         run: pytest -q
 

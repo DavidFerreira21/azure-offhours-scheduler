@@ -369,7 +369,7 @@ echo "Preparing Function App publish bundle..."
 echo "Publishing Function App $FUNCTION_APP_NAME..."
 (
   cd "$ROOT_DIR/function"
-  func azure functionapp publish "$FUNCTION_APP_NAME" --python
+  func azure functionapp publish "$FUNCTION_APP_NAME" --python --build remote
 )
 
 echo "Deployment completed."

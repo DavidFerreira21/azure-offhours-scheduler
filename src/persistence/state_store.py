@@ -65,7 +65,10 @@ class AzureTableStateStore:
 
     @classmethod
     def _row_key(cls, resource) -> str:
-        return hashlib.sha1(cls._canonical_resource_id(resource).encode("utf-8")).hexdigest()
+        return hashlib.sha1(
+            cls._canonical_resource_id(resource).encode("utf-8"),
+            usedforsecurity=False,
+        ).hexdigest()
 
     def get_state(self, resource) -> SchedulerState | None:
         from azure.core.exceptions import ResourceNotFoundError
