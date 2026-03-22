@@ -77,6 +77,12 @@ az login
 Deploy:
 
 ```bash
+make deploy
+```
+
+Ou:
+
+```bash
 ./scripts/deploy_scheduler.sh --parameters-file infra/bicep/main.parameters.json
 ```
 
@@ -86,6 +92,7 @@ Parâmetros mínimos:
 - `location`
 - `namePrefix`
 - `subscriptionIds` ou `managementGroupIds`
+- `tableOperatorsGroupObjectId`
 
 ## Exemplo de Uso
 

@@ -68,6 +68,10 @@ var storageTableDataContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3'
 )
+var storageBlobDataOwnerRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  'b7e6dc6d-f1e8-4753-8033-0f276bb0955b'
+)
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -79,6 +83,7 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
     supportsHttpsTrafficOnly: true
   }
 }
@@ -146,12 +151,22 @@ resource existingPlan 'Microsoft.Web/serverfarms@2022-09-01' existing = if (useE
   name: planName
 }
 
-var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
 var serverFarmId = useExistingPlan ? existingPlan.id : plan.id
+var tableServiceUri = 'https://${storage.name}.table.${environment().suffixes.storage}'
 
 resource bootstrapScriptIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (bootstrapDefaults) {
   name: '${functionAppName}-bootstrap-id'
   location: location
+}
+
+resource bootstrapStorageTableContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (bootstrapDefaults) {
+  name: guid(storage.id, bootstrapScriptIdentity!.id, storageTableDataContributorRoleDefinitionId)
+  scope: storage
+  properties: {
+    roleDefinitionId: storageTableDataContributorRoleDefinitionId
+    principalId: bootstrapScriptIdentity!.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (bootstrapDefaults) {
@@ -161,7 +176,7 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {
-      '${bootstrapScriptIdentity.id}': {}
+      '${bootstrapScriptIdentity!.id}': {}
     }
   }
   properties: {
@@ -172,8 +187,8 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
     forceUpdateTag: deployment().name
     environmentVariables: [
       {
-        name: 'BOOTSTRAP_CONNECTION_STRING'
-        secureValue: storageConnectionString
+        name: 'BOOTSTRAP_STORAGE_ACCOUNT'
+        value: storage.name
       }
       {
         name: 'BOOTSTRAP_CONFIG_TABLE'
@@ -199,7 +214,8 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
         local row_key="$3"
 
         az storage entity show \
-          --connection-string "$BOOTSTRAP_CONNECTION_STRING" \
+          --account-name "$BOOTSTRAP_STORAGE_ACCOUNT" \
+          --auth-mode login \
           --table-name "$table_name" \
           --partition-key "$partition_key" \
           --row-key "$row_key" \
@@ -209,7 +225,8 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
 
       if ! entity_exists "$BOOTSTRAP_CONFIG_TABLE" "GLOBAL" "runtime"; then
         az storage entity insert \
-          --connection-string "$BOOTSTRAP_CONNECTION_STRING" \
+          --account-name "$BOOTSTRAP_STORAGE_ACCOUNT" \
+          --auth-mode login \
           --table-name "$BOOTSTRAP_CONFIG_TABLE" \
           --if-exists fail \
           --entity \
@@ -229,7 +246,8 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
 
       if ! entity_exists "$BOOTSTRAP_SCHEDULE_TABLE" "SCHEDULE" "business-hours"; then
         az storage entity insert \
-          --connection-string "$BOOTSTRAP_CONNECTION_STRING" \
+          --account-name "$BOOTSTRAP_STORAGE_ACCOUNT" \
+          --auth-mode login \
           --table-name "$BOOTSTRAP_SCHEDULE_TABLE" \
           --if-exists fail \
           --entity \
@@ -248,6 +266,7 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
     '''
   }
   dependsOn: [
+    bootstrapStorageTableContributorAssignment
     configTable
     scheduleTable
   ]
@@ -267,8 +286,12 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
       linuxFxVersion: 'Python|3.12'
       appSettings: [
         {
-          name: 'AzureWebJobsStorage'
-          value: storageConnectionString
+          name: 'AzureWebJobsStorage__accountName'
+          value: storage.name
+        }
+        {
+          name: 'AzureWebJobsStorage__credential'
+          value: 'managedidentity'
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
@@ -311,8 +334,8 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           value: timerSchedule
         }
         {
-          name: 'SCHEDULER_STORAGE_CONNECTION_STRING'
-          value: storageConnectionString
+          name: 'SCHEDULER_TABLE_SERVICE_URI'
+          value: tableServiceUri
         }
         {
           name: 'CONFIG_STORAGE_TABLE_NAME'
@@ -332,6 +355,26 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         }
       ]
     }
+  }
+}
+
+resource functionStorageBlobOwnerAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, functionApp.name, storageBlobDataOwnerRoleDefinitionId)
+  scope: storage
+  properties: {
+    roleDefinitionId: storageBlobDataOwnerRoleDefinitionId
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource functionStorageTableContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, functionApp.name, storageTableDataContributorRoleDefinitionId)
+  scope: storage
+  properties: {
+    roleDefinitionId: storageTableDataContributorRoleDefinitionId
+    principalId: functionApp.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 

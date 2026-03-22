@@ -33,6 +33,11 @@ Opcoes:
 - iniciar Azurite localmente
 - usar uma connection string real de Storage Account para testes
 
+Observacao:
+
+- em Azure, o deploy Bicep usa identidade gerenciada para o host da Function e para o acesso da aplicacao as tabelas
+- `SCHEDULER_STORAGE_CONNECTION_STRING` permanece apenas como fallback para desenvolvimento local
+
 ## 4. `No module named 'config'`
 
 No contexto atual da estrutura do projeto, esse erro normalmente indica que o bundle da Function nao foi preparado antes do publish.
@@ -56,6 +61,8 @@ Verifique se existe um grupo configurado em:
 E se esse grupo recebeu:
 
 - `Storage Table Data Contributor`
+
+Esse mesmo requisito vale para o bootstrap manual das tabelas, que agora usa `az storage entity ... --auth-mode login` em vez de shared key.
 
 ## 6. A Function sobe, mas nao acha recursos
 

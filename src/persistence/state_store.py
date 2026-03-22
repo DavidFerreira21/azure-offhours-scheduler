@@ -30,18 +30,40 @@ class NoopStateStore:
 
 
 class AzureTableStateStore:
-    def __init__(self, connection_string: str, table_name: str = "OffHoursSchedulerState") -> None:
+    def __init__(
+        self,
+        connection_string: str = "",
+        table_service_uri: str = "",
+        table_name: str = "OffHoursSchedulerState",
+        credential=None,
+    ) -> None:
         self.connection_string = connection_string
+        self.table_service_uri = table_service_uri
         self.table_name = table_name
+        self.credential = credential
         self._table_client = None
 
     def _client(self):
         if self._table_client:
             return self._table_client
 
-        from azure.data.tables import TableServiceClient
+        if self.connection_string:
+            from azure.data.tables import TableServiceClient
 
-        service = TableServiceClient.from_connection_string(self.connection_string)
+            service = TableServiceClient.from_connection_string(self.connection_string)
+            service.create_table_if_not_exists(self.table_name)
+            table = service.get_table_client(self.table_name)
+            self._table_client = table
+            return self._table_client
+
+        if not self.table_service_uri:
+            raise ValueError("table_service_uri is required when connection_string is not configured")
+
+        from azure.data.tables import TableServiceClient
+        from azure.identity import DefaultAzureCredential
+
+        credential = self.credential or DefaultAzureCredential()
+        service = TableServiceClient(endpoint=self.table_service_uri, credential=credential)
         service.create_table_if_not_exists(self.table_name)
         table = service.get_table_client(self.table_name)
         self._table_client = table

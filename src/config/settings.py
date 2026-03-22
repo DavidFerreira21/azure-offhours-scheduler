@@ -30,17 +30,16 @@ def _read_target_resource_locations() -> tuple[str, ...]:
     return _read_csv_env("TARGET_RESOURCE_LOCATIONS", normalize_lower=True)
 
 
+def _read_scheduler_table_service_uri() -> str:
+    return os.getenv("SCHEDULER_TABLE_SERVICE_URI", "").strip()
+
+
 def _read_table_storage_connection_string() -> str:
-    connection_string = (
+    return (
         os.getenv("SCHEDULER_STORAGE_CONNECTION_STRING", "").strip()
         or os.getenv("STATE_STORAGE_CONNECTION_STRING", "").strip()
         or os.getenv("AzureWebJobsStorage", "").strip()
     )
-    if not connection_string:
-        raise ValueError(
-            "SCHEDULER_STORAGE_CONNECTION_STRING is required when AzureWebJobsStorage is not configured"
-        )
-    return connection_string
 
 
 def _read_table_name(env_name: str, default_value: str) -> str:
@@ -76,6 +75,7 @@ def _read_resource_result_log_mode() -> str:
 class Settings:
     subscription_ids: list[str]
     target_resource_locations: tuple[str, ...]
+    table_service_uri: str
     table_storage_connection_string: str
     config_storage_table_name: str
     schedule_storage_table_name: str
@@ -86,10 +86,17 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        table_service_uri = _read_scheduler_table_service_uri()
+        table_storage_connection_string = _read_table_storage_connection_string()
+        if not table_service_uri and not table_storage_connection_string:
+            raise ValueError(
+                "SCHEDULER_TABLE_SERVICE_URI or SCHEDULER_STORAGE_CONNECTION_STRING is required"
+            )
         return cls(
             subscription_ids=_read_required_subscription_ids(),
             target_resource_locations=_read_target_resource_locations(),
-            table_storage_connection_string=_read_table_storage_connection_string(),
+            table_service_uri=table_service_uri,
+            table_storage_connection_string=table_storage_connection_string,
             config_storage_table_name=_read_table_name("CONFIG_STORAGE_TABLE_NAME", "OffHoursSchedulerConfig"),
             schedule_storage_table_name=_read_table_name(
                 "SCHEDULE_STORAGE_TABLE_NAME",

@@ -95,12 +95,6 @@ if [[ -z "$UPDATED_BY" ]]; then
 fi
 
 UPDATED_AT_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-CONNECTION_STRING="$(
-  az storage account show-connection-string \
-    --name "$STORAGE_ACCOUNT" \
-    --resource-group "$RESOURCE_GROUP" \
-    -o tsv
-)"
 
 entity_exists() {
   local table_name="$1"
@@ -108,7 +102,8 @@ entity_exists() {
   local row_key="$3"
 
   az storage entity show \
-    --connection-string "$CONNECTION_STRING" \
+    --account-name "$STORAGE_ACCOUNT" \
+    --auth-mode login \
     --table-name "$table_name" \
     --partition-key "$partition_key" \
     --row-key "$row_key" \
@@ -116,48 +111,59 @@ entity_exists() {
     -o none >/dev/null 2>&1
 }
 
+insert_entity() {
+  local table_name="$1"
+  shift
+
+  if ! az storage entity insert \
+    --account-name "$STORAGE_ACCOUNT" \
+    --auth-mode login \
+    --table-name "$table_name" \
+    --if-exists fail \
+    --entity "$@" \
+    --only-show-errors \
+    -o none; then
+    cat >&2 <<EOF
+ERROR: Failed to write entity to table '$table_name' in storage account '$STORAGE_ACCOUNT'.
+This bootstrap now uses Microsoft Entra ID, not shared keys.
+Ensure the current Azure identity has Storage Table Data Contributor on the scheduler storage account and allow a few minutes for RBAC propagation after deployment.
+EOF
+    exit 1
+  fi
+}
+
 if entity_exists "$CONFIG_TABLE" "GLOBAL" "runtime"; then
   echo "Config entity already exists in $CONFIG_TABLE; skipping bootstrap for global settings."
 else
-  az storage entity insert \
-    --connection-string "$CONNECTION_STRING" \
-    --table-name "$CONFIG_TABLE" \
-    --if-exists fail \
-    --entity \
-      PartitionKey=GLOBAL \
-      RowKey=runtime \
-      DRY_RUN=true \
-      DEFAULT_TIMEZONE="$DEFAULT_TIMEZONE" \
-      SCHEDULE_TAG_KEY=schedule \
-      RETAIN_RUNNING=false \
-      RETAIN_STOPPED=false \
-      Version=1 \
-      UpdatedAtUtc="$UPDATED_AT_UTC" \
-      UpdatedBy="$UPDATED_BY" \
-    --only-show-errors \
-    -o none
+  insert_entity \
+    "$CONFIG_TABLE" \
+    PartitionKey=GLOBAL \
+    RowKey=runtime \
+    DRY_RUN=true \
+    DEFAULT_TIMEZONE="$DEFAULT_TIMEZONE" \
+    SCHEDULE_TAG_KEY=schedule \
+    RETAIN_RUNNING=false \
+    RETAIN_STOPPED=false \
+    Version=1 \
+    UpdatedAtUtc="$UPDATED_AT_UTC" \
+    UpdatedBy="$UPDATED_BY"
   echo "Inserted default global configuration into $CONFIG_TABLE."
 fi
 
 if entity_exists "$SCHEDULE_TABLE" "SCHEDULE" "$SCHEDULE_NAME"; then
   echo "Schedule '$SCHEDULE_NAME' already exists in $SCHEDULE_TABLE; skipping bootstrap schedule."
 else
-  az storage entity insert \
-    --connection-string "$CONNECTION_STRING" \
-    --table-name "$SCHEDULE_TABLE" \
-    --if-exists fail \
-    --entity \
-      PartitionKey=SCHEDULE \
-      RowKey="$SCHEDULE_NAME" \
-      Start="$BUSINESS_START" \
-      Stop="$BUSINESS_STOP" \
-      SkipDays=saturday,sunday \
-      Enabled=true \
-      Version=1 \
-      UpdatedAtUtc="$UPDATED_AT_UTC" \
-      UpdatedBy="$UPDATED_BY" \
-    --only-show-errors \
-    -o none
+  insert_entity \
+    "$SCHEDULE_TABLE" \
+    PartitionKey=SCHEDULE \
+    RowKey="$SCHEDULE_NAME" \
+    Start="$BUSINESS_START" \
+    Stop="$BUSINESS_STOP" \
+    SkipDays=saturday,sunday \
+    Enabled=true \
+    Version=1 \
+    UpdatedAtUtc="$UPDATED_AT_UTC" \
+    UpdatedBy="$UPDATED_BY"
   echo "Inserted default schedule '$SCHEDULE_NAME' into $SCHEDULE_TABLE."
 fi
 

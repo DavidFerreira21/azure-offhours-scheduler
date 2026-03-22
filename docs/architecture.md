@@ -67,7 +67,8 @@ O ambiente da Function guarda apenas configuracao tecnica:
 - `TARGET_RESOURCE_LOCATIONS`
 - `DECLARED_MANAGEMENT_GROUP_IDS`
 - `DECLARED_EXCLUDE_SUBSCRIPTION_IDS`
-- `SCHEDULER_STORAGE_CONNECTION_STRING` ou `AzureWebJobsStorage`
+- `AzureWebJobsStorage__accountName`
+- `SCHEDULER_TABLE_SERVICE_URI`
 - `CONFIG_STORAGE_TABLE_NAME`
 - `SCHEDULE_STORAGE_TABLE_NAME`
 - `STATE_STORAGE_TABLE_NAME`
@@ -153,6 +154,9 @@ Para primeira carga operacional, o repositorio tambem disponibiliza um bootstrap
 ```
 
 O bootstrap cria uma configuracao global segura em `DRY_RUN=true` e um schedule `business-hours` (`08:00-18:00`, segunda a sexta) apenas se essas entidades ainda nao existirem.
+
+No desenho atual, esse bootstrap usa Microsoft Entra ID com `az storage entity ... --auth-mode login`, nao shared key.
+Por isso, quem executa o bootstrap precisa ter `Storage Table Data Contributor` na Storage Account do scheduler.
 
 Na operacao recomendada do repositorio, esse bootstrap e chamado automaticamente por:
 
@@ -528,12 +532,16 @@ Hoje o deploy atribui:
 
 - `Reader`
 - `Virtual Machine Contributor`
+- `Storage Blob Data Owner`
+- `Storage Table Data Contributor`
 
 Essas permissoes cobrem:
 
 - leitura de recursos monitorados
 - discovery via Resource Graph
 - operacoes de `start/deallocate` em VMs
+- operacao do host da Function sem shared key
+- leitura e gravacao das tabelas operacionais via managed identity
 
 ### Permissoes para operadores humanos
 
@@ -557,16 +565,16 @@ Uso recomendado:
 
 ### Acesso as tabelas
 
-No desenho atual, a Function acessa as tabelas por `connection string` da storage account.
+No desenho atual em Azure, a Function acessa:
+
+- o host storage por identidade usando `AzureWebJobsStorage__accountName`
+- as tabelas operacionais por identidade usando `SCHEDULER_TABLE_SERVICE_URI`
 
 Implicacao:
 
-- o acesso a Table Storage nao depende de RBAC da managed identity
-- a identidade precisa de RBAC apenas para consultar e operar recursos Azure
-
-Observacao:
-
-- se o projeto migrar no futuro para acesso por managed identity na storage, sera necessario RBAC de dados na Storage Account
+- o deploy nao precisa injetar `AccountKey` em app settings
+- o acesso a Table Storage depende de RBAC de dados na Storage Account
+- `SCHEDULER_STORAGE_CONNECTION_STRING` permanece apenas como fallback para desenvolvimento local
 
 ## Como a solucao muda sem redeploy
 

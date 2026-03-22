@@ -138,7 +138,8 @@ Le apenas configuracao tecnica:
 
 - subscriptions efetivas
 - regioes alvo
-- connection string das tabelas
+- `SCHEDULER_TABLE_SERVICE_URI` no ambiente Azure
+- connection string das tabelas apenas como fallback para desenvolvimento local
 - nomes das tabelas
 - concorrencia maxima
 

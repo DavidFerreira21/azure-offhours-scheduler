@@ -8,6 +8,7 @@
     "TARGET_RESOURCE_LOCATIONS": "",
     "ENABLE_VERBOSE_AZURE_SDK_LOGS": "false",
     "RESOURCE_RESULT_LOG_MODE": "executed-and-errors",
+    "SCHEDULER_TABLE_SERVICE_URI": "",
     "SCHEDULER_STORAGE_CONNECTION_STRING": "UseDevelopmentStorage=true",
     "CONFIG_STORAGE_TABLE_NAME": "OffHoursSchedulerConfig",
     "SCHEDULE_STORAGE_TABLE_NAME": "OffHoursSchedulerSchedules",

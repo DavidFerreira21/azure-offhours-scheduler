@@ -51,7 +51,8 @@ Responsabilidades:
 
 - ler `AZURE_SUBSCRIPTION_IDS`
 - ler `TARGET_RESOURCE_LOCATIONS`
-- ler connection string das tabelas
+- ler `SCHEDULER_TABLE_SERVICE_URI` no Azure
+- manter fallback de connection string apenas para compatibilidade local
 - ler nomes das tabelas
 - ler `MAX_WORKERS`
 - ler `ENABLE_VERBOSE_AZURE_SDK_LOGS`

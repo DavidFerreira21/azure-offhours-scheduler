@@ -58,10 +58,12 @@ def main(timer: func.TimerRequest) -> None:
     settings = Settings.from_env()
     _configure_sdk_logging(settings.enable_verbose_azure_sdk_logs)
     global_config = AzureTableGlobalConfigStore(
+        table_service_uri=settings.table_service_uri,
         connection_string=settings.table_storage_connection_string,
         table_name=settings.config_storage_table_name,
     ).load()
     schedules = AzureTableScheduleStore(
+        table_service_uri=settings.table_service_uri,
         connection_string=settings.table_storage_connection_string,
         table_name=settings.schedule_storage_table_name,
     ).load_all()
@@ -83,6 +85,7 @@ def main(timer: func.TimerRequest) -> None:
     state_store = NoopStateStore()
     if global_config.retain_running or global_config.retain_stopped:
         state_store = AzureTableStateStore(
+            table_service_uri=settings.table_service_uri,
             connection_string=settings.table_storage_connection_string,
             table_name=settings.state_storage_table_name,
         )

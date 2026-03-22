@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "10018217274871689519"
+      "templateHash": "17072755918453139526"
     }
   },
   "parameters": {
@@ -262,7 +262,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "15982703329455625074"
+              "templateHash": "16536777283544879814"
             }
           },
           "parameters": {
@@ -406,7 +406,9 @@
           },
           "variables": {
             "storageTableDataContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]",
-            "serverFarmId": "[if(parameters('useExistingPlan'), resourceId('Microsoft.Web/serverfarms', parameters('planName')), resourceId('Microsoft.Web/serverfarms', parameters('planName')))]"
+            "storageBlobDataOwnerRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')]",
+            "serverFarmId": "[if(parameters('useExistingPlan'), resourceId('Microsoft.Web/serverfarms', parameters('planName')), resourceId('Microsoft.Web/serverfarms', parameters('planName')))]",
+            "tableServiceUri": "[format('https://{0}.table.{1}', parameters('storageAccountName'), environment().suffixes.storage)]"
           },
           "resources": [
             {
@@ -421,6 +423,7 @@
               "properties": {
                 "minimumTlsVersion": "TLS1_2",
                 "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": false,
                 "supportsHttpsTrafficOnly": true
               }
             },
@@ -516,6 +519,22 @@
             },
             {
               "condition": "[parameters('bootstrapDefaults')]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName'))), variables('storageTableDataContributorRoleDefinitionId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('storageTableDataContributorRoleDefinitionId')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName'))), '2023-01-31').principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName')))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('bootstrapDefaults')]",
               "type": "Microsoft.Resources/deploymentScripts",
               "apiVersion": "2023-08-01",
               "name": "bootstrap-scheduler-defaults",
@@ -535,8 +554,8 @@
                 "forceUpdateTag": "[deployment().name]",
                 "environmentVariables": [
                   {
-                    "name": "BOOTSTRAP_CONNECTION_STRING",
-                    "secureValue": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
+                    "name": "BOOTSTRAP_STORAGE_ACCOUNT",
+                    "value": "[parameters('storageAccountName')]"
                   },
                   {
                     "name": "BOOTSTRAP_CONFIG_TABLE",
@@ -551,10 +570,11 @@
                     "value": "bicep-bootstrap"
                   }
                 ],
-                "scriptContent": "      set -euo pipefail\n\n      updated_at_utc=\"$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"\n\n      entity_exists() {\n        local table_name=\"$1\"\n        local partition_key=\"$2\"\n        local row_key=\"$3\"\n\n        az storage entity show \\\n          --connection-string \"$BOOTSTRAP_CONNECTION_STRING\" \\\n          --table-name \"$table_name\" \\\n          --partition-key \"$partition_key\" \\\n          --row-key \"$row_key\" \\\n          --only-show-errors \\\n          -o none >/dev/null 2>&1\n      }\n\n      if ! entity_exists \"$BOOTSTRAP_CONFIG_TABLE\" \"GLOBAL\" \"runtime\"; then\n        az storage entity insert \\\n          --connection-string \"$BOOTSTRAP_CONNECTION_STRING\" \\\n          --table-name \"$BOOTSTRAP_CONFIG_TABLE\" \\\n          --if-exists fail \\\n          --entity \\\n            PartitionKey=GLOBAL \\\n            RowKey=runtime \\\n            DRY_RUN=true \\\n            DEFAULT_TIMEZONE=America/Sao_Paulo \\\n            SCHEDULE_TAG_KEY=schedule \\\n            RETAIN_RUNNING=false \\\n            RETAIN_STOPPED=false \\\n            Version=1 \\\n            UpdatedAtUtc=\"$updated_at_utc\" \\\n            UpdatedBy=\"$BOOTSTRAP_UPDATED_BY\" \\\n          --only-show-errors \\\n          -o none\n      fi\n\n      if ! entity_exists \"$BOOTSTRAP_SCHEDULE_TABLE\" \"SCHEDULE\" \"business-hours\"; then\n        az storage entity insert \\\n          --connection-string \"$BOOTSTRAP_CONNECTION_STRING\" \\\n          --table-name \"$BOOTSTRAP_SCHEDULE_TABLE\" \\\n          --if-exists fail \\\n          --entity \\\n            PartitionKey=SCHEDULE \\\n            RowKey=business-hours \\\n            Start=08:00 \\\n            Stop=18:00 \\\n            SkipDays=saturday,sunday \\\n            Enabled=true \\\n            Version=1 \\\n            UpdatedAtUtc=\"$updated_at_utc\" \\\n            UpdatedBy=\"$BOOTSTRAP_UPDATED_BY\" \\\n          --only-show-errors \\\n          -o none\n      fi\n    "
+                "scriptContent": "      set -euo pipefail\n\n      updated_at_utc=\"$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\"\n\n      entity_exists() {\n        local table_name=\"$1\"\n        local partition_key=\"$2\"\n        local row_key=\"$3\"\n\n        az storage entity show \\\n          --account-name \"$BOOTSTRAP_STORAGE_ACCOUNT\" \\\n          --auth-mode login \\\n          --table-name \"$table_name\" \\\n          --partition-key \"$partition_key\" \\\n          --row-key \"$row_key\" \\\n          --only-show-errors \\\n          -o none >/dev/null 2>&1\n      }\n\n      if ! entity_exists \"$BOOTSTRAP_CONFIG_TABLE\" \"GLOBAL\" \"runtime\"; then\n        az storage entity insert \\\n          --account-name \"$BOOTSTRAP_STORAGE_ACCOUNT\" \\\n          --auth-mode login \\\n          --table-name \"$BOOTSTRAP_CONFIG_TABLE\" \\\n          --if-exists fail \\\n          --entity \\\n            PartitionKey=GLOBAL \\\n            RowKey=runtime \\\n            DRY_RUN=true \\\n            DEFAULT_TIMEZONE=America/Sao_Paulo \\\n            SCHEDULE_TAG_KEY=schedule \\\n            RETAIN_RUNNING=false \\\n            RETAIN_STOPPED=false \\\n            Version=1 \\\n            UpdatedAtUtc=\"$updated_at_utc\" \\\n            UpdatedBy=\"$BOOTSTRAP_UPDATED_BY\" \\\n          --only-show-errors \\\n          -o none\n      fi\n\n      if ! entity_exists \"$BOOTSTRAP_SCHEDULE_TABLE\" \"SCHEDULE\" \"business-hours\"; then\n        az storage entity insert \\\n          --account-name \"$BOOTSTRAP_STORAGE_ACCOUNT\" \\\n          --auth-mode login \\\n          --table-name \"$BOOTSTRAP_SCHEDULE_TABLE\" \\\n          --if-exists fail \\\n          --entity \\\n            PartitionKey=SCHEDULE \\\n            RowKey=business-hours \\\n            Start=08:00 \\\n            Stop=18:00 \\\n            SkipDays=saturday,sunday \\\n            Enabled=true \\\n            Version=1 \\\n            UpdatedAtUtc=\"$updated_at_utc\" \\\n            UpdatedBy=\"$BOOTSTRAP_UPDATED_BY\" \\\n          --only-show-errors \\\n          -o none\n      fi\n    "
               },
               "dependsOn": [
                 "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName')))]",
+                "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-bootstrap-id', parameters('functionAppName'))), variables('storageTableDataContributorRoleDefinitionId')))]",
                 "[resourceId('Microsoft.Storage/storageAccounts/tableServices/tables', split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName')), '/')[0], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName')), '/')[1], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('configTableName')), '/')[2])]",
                 "[resourceId('Microsoft.Storage/storageAccounts/tableServices/tables', split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName')), '/')[0], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName')), '/')[1], split(format('{0}/default/{1}', parameters('storageAccountName'), parameters('scheduleTableName')), '/')[2])]",
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
@@ -576,8 +596,12 @@
                   "linuxFxVersion": "Python|3.12",
                   "appSettings": [
                     {
-                      "name": "AzureWebJobsStorage",
-                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
+                      "name": "AzureWebJobsStorage__accountName",
+                      "value": "[parameters('storageAccountName')]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__credential",
+                      "value": "managedidentity"
                     },
                     {
                       "name": "FUNCTIONS_EXTENSION_VERSION",
@@ -620,8 +644,8 @@
                       "value": "[parameters('timerSchedule')]"
                     },
                     {
-                      "name": "SCHEDULER_STORAGE_CONNECTION_STRING",
-                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)]"
+                      "name": "SCHEDULER_TABLE_SERVICE_URI",
+                      "value": "[variables('tableServiceUri')]"
                     },
                     {
                       "name": "CONFIG_STORAGE_TABLE_NAME",
@@ -645,6 +669,36 @@
               "dependsOn": [
                 "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]",
                 "[resourceId('Microsoft.Web/serverfarms', parameters('planName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('functionAppName'), variables('storageBlobDataOwnerRoleDefinitionId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('storageBlobDataOwnerRoleDefinitionId')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('functionAppName'), variables('storageTableDataContributorRoleDefinitionId'))]",
+              "properties": {
+                "roleDefinitionId": "[variables('storageTableDataContributorRoleDefinitionId')]",
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
               ]
             }
