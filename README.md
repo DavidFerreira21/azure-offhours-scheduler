@@ -28,6 +28,17 @@ Grande parte das soluções de off-hours falha nos mesmos pontos:
 - overrides manuais são desfeitos rápido demais
 - os logs mostram que algo rodou, mas não deixam claro o resultado
 
+## Por que não usar scripts ou automações simples?
+
+Abordagens tradicionais costumam:
+
+- quebrar em escala multi-subscription
+- misturar config com código
+- não respeitar overrides manuais
+- não ter auditoria clara
+
+Este projeto resolve esses pontos com um modelo table-driven e governança explícita.
+
 ## A Solução
 
 Azure OffHours Scheduler centraliza a configuração operacional do scheduler sem misturar regra de negócio com configuração técnica de runtime:
@@ -40,21 +51,8 @@ Azure OffHours Scheduler centraliza a configuração operacional do scheduler se
 
 ## Arquitetura Simplificada
 
-```text
-Timer Trigger
-  ↓
-Config + Schedules no Table Storage
-  ↓
-Discovery via Azure Resource Graph
-  ↓
-Avaliação de regras e escopo
-  ↓
-Ação: START | STOP | SKIP
-  ↓
-Persistência de estado
-  ↓
-Relatório estruturado da execução
-```
+<img src="Arquitetura.png" alt="Arquitetura do Azure OffHours Scheduler" width="720">
+
 
 Tabelas principais:
 
