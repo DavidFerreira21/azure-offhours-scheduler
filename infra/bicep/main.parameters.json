@@ -3,7 +3,7 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "tableOperatorsGroupObjectId": {
-      "value": "abad7980-ce43-4c1d-8602-ef758e13ecdc"
+      "value": ""
 },
     "resourceGroupName": {
       "value": "rg-offhours-scheduler-985524"
@@ -19,7 +19,7 @@
     },
     "subscriptionIds": {
       "value": [
-        "fb92cd83-75ed-4643-9d26-8e4dfa985524"
+        ""
       ]
     },
     "managementGroupIds": {

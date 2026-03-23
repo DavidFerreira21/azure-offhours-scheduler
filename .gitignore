@@ -13,3 +13,4 @@ function/handlers/
 function/persistence/
 function/reporting/
 function/scheduler/
+infra/bicep/main.parameters.json

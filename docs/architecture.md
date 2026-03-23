@@ -153,7 +153,7 @@ Para primeira carga operacional, o repositorio tambem disponibiliza um bootstrap
 ./scripts/bootstrap_scheduler_tables.sh --resource-group <rg> --storage-account <account>
 ```
 
-O bootstrap cria uma configuracao global segura em `DRY_RUN=true` e um schedule `business-hours` (`08:00-18:00`, segunda a sexta) apenas se essas entidades ainda nao existirem.
+O bootstrap cria uma configuracao global com `DRY_RUN=false` e um schedule `business-hours` (`08:00-18:00`, segunda a sexta) apenas se essas entidades ainda nao existirem.
 
 No desenho atual, esse bootstrap usa Microsoft Entra ID com `az storage entity ... --auth-mode login`, nao shared key.
 Por isso, quem executa o bootstrap precisa ter `Storage Table Data Contributor` na Storage Account do scheduler.

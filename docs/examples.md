@@ -225,7 +225,7 @@ Se quiser todas as regioes:
 Passo a passo recomendado:
 
 1. subir a infra
-2. manter `DRY_RUN=true`
+2. ajustar `DRY_RUN=true` se quiser uma validacao inicial sem acao real
 3. criar `business-hours`
 4. marcar uma VM com:
 
@@ -247,7 +247,7 @@ Config:
 {
   "PartitionKey": "GLOBAL",
   "RowKey": "runtime",
-  "DRY_RUN": true,
+  "DRY_RUN": false,
   "DEFAULT_TIMEZONE": "America/Sao_Paulo",
   "SCHEDULE_TAG_KEY": "schedule",
   "RETAIN_RUNNING": false,

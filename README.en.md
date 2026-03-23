@@ -207,7 +207,7 @@ Roadmap:
 
 - Operational data belongs in tables, not in code
 - Technical runtime configuration stays separate from business rules
-- Safe defaults come first, such as `DRY_RUN=true`
+- Operational defaults should be explicit
 - Scope should be explicit and auditable
 - The solution should remain simple to operate
 - Observability should improve without adding unnecessary complexity

@@ -58,7 +58,7 @@ param scheduleTableName string = 'OffHoursSchedulerSchedules'
 @description('Azure Table Storage table name used for scheduler state.')
 param stateTableName string = 'OffHoursSchedulerState'
 
-@description('When true, seed the configuration tables with a safe default bootstrap.')
+@description('When true, seed the configuration tables with the default bootstrap.')
 param bootstrapDefaults bool = true
 
 @description('Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account.')
@@ -232,7 +232,7 @@ resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-
           --entity \
             PartitionKey=GLOBAL \
             RowKey=runtime \
-            DRY_RUN=true \
+            DRY_RUN=false \
             DEFAULT_TIMEZONE=America/Sao_Paulo \
             SCHEDULE_TAG_KEY=schedule \
             RETAIN_RUNNING=false \

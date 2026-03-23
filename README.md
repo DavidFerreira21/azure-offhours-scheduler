@@ -214,7 +214,7 @@ Roadmap:
 
 - Dados operacionais ficam em tabelas, não no código
 - Configuração técnica de runtime fica separada das regras de negócio
-- Defaults seguros vêm primeiro, como `DRY_RUN=true`
+- Defaults operacionais devem ser explícitos
 - Escopo deve ser explícito e auditável
 - A solução deve continuar simples de operar
 - Observabilidade deve crescer sem introduzir complexidade desnecessária

@@ -139,7 +139,7 @@ else
     "$CONFIG_TABLE" \
     PartitionKey=GLOBAL \
     RowKey=runtime \
-    DRY_RUN=true \
+    DRY_RUN=false \
     DEFAULT_TIMEZONE="$DEFAULT_TIMEZONE" \
     SCHEDULE_TAG_KEY=schedule \
     RETAIN_RUNNING=false \
