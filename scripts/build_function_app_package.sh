@@ -21,6 +21,7 @@ entries = [
     "host.json",
     "requirements.txt",
     "OffHoursTimer",
+    ".python_packages",
     "config",
     "discovery",
     "handlers",

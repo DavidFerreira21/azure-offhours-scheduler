@@ -300,12 +300,12 @@ build_function_package() {
 
 publish_function_package() {
   printf '%s\n' "Publishing Function App $FUNCTION_APP_NAME with zip deploy..."
-  printf '%s\n' "This step may take several minutes because Azure performs remote build, package extraction, and trigger registration."
+  printf '%s\n' "This step may take several minutes because Azure uploads the package, mounts it, and registers triggers."
   az functionapp deployment source config-zip \
     --resource-group "$RESOURCE_GROUP" \
     --name "$FUNCTION_APP_NAME" \
     --src "$FUNCTION_PACKAGE_PATH" \
-    --build-remote true \
+    --build-remote false \
     --timeout 600 \
     --only-show-errors \
     -o none || fail "Function App zip deployment failed."

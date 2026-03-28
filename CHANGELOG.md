@@ -4,6 +4,20 @@ All notable changes to this project should be documented in this file.
 
 The format is inspired by Keep a Changelog.
 
+## [1.1.1] - 2026-03-28
+
+### Changed
+
+- Function App publish now builds the deployment bundle locally, including `.python_packages`, before zip deploy
+- Function App zip deploy now publishes the ready-to-run package with `--build-remote false`
+- Function App configuration now enables `alwaysOn` to reduce cold start and improve host readiness after deploy
+
+### Fixed
+
+- Resolved a publish path where Azure remote build could produce an active package without `OffHoursTimer`
+- Improved first-run Function registration reliability by shipping the full Python runtime payload inside the deployment package
+- Documentation aligned with the new local package build flow instead of the previous remote build flow
+
 ## [1.1.0] - 2026-03-27
 
 ### Added

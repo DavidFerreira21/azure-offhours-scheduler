@@ -162,6 +162,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
     serverFarmId: serverFarmId
     httpsOnly: true
     siteConfig: {
+      alwaysOn: true
       linuxFxVersion: 'Python|3.12'
       appSettings: [
         {

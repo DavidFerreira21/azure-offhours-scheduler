@@ -26,7 +26,8 @@ No fluxo atual, o deploy recomendado:
 
 - prepara o bundle com `./scripts/prepare_function_app_publish.sh`
 - monta um zip explicito com `./scripts/build_function_app_package.sh`
-- publica com `az functionapp deployment source config-zip --build-remote true`
+- instala dependencias em `.python_packages` localmente
+- publica com `az functionapp deployment source config-zip --build-remote false`
 - sincroniza os triggers antes de concluir
 - confirma que `OffHoursTimer` foi registrado no Azure
 

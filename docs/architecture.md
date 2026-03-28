@@ -175,7 +175,7 @@ Esse wrapper executa um preflight antes do deploy:
 - executa `az deployment sub validate` antes do create
 
 Depois disso, ele executa o deploy da infra e publica a Function App no final.
-No estado atual, o publish monta um zip explicito do diretório `function/`, usa `az functionapp deployment source config-zip --build-remote true`, sincroniza os triggers e confirma que `OffHoursTimer` foi registrado antes de concluir.
+No estado atual, o publish prepara o bundle local em `function/`, instala as dependencias em `.python_packages`, monta um zip explicito e publica com `az functionapp deployment source config-zip --build-remote false`, sincroniza os triggers e confirma que `OffHoursTimer` foi registrado antes de concluir.
 No fim, o wrapper tambem grava `.offhours.env` para a CLI local e mostra os comandos recomendados de seed inicial.
 
 Depois do deploy, o seed inicial esperado e:
@@ -200,6 +200,8 @@ A identidade gerenciada da Function recebe:
 - `Virtual Machine Contributor`
 
 Esses papeis sao atribuidos em cada subscription do escopo tecnico efetivo resolvido pelo deploy.
+
+A Function App tambem sobe com `alwaysOn=true` no `siteConfig`, o que reduz cold start e melhora o readiness do host depois do publish.
 
 ### Etapa 2. Disparo do timer
 

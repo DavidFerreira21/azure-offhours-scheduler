@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "16231395411709489218"
+      "templateHash": "15809065352052755299"
     }
   },
   "parameters": {
@@ -252,7 +252,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "14166578902810216132"
+              "templateHash": "13888292169801791181"
             }
           },
           "parameters": {
@@ -506,6 +506,7 @@
                 "serverFarmId": "[variables('serverFarmId')]",
                 "httpsOnly": true,
                 "siteConfig": {
+                  "alwaysOn": true,
                   "linuxFxVersion": "Python|3.12",
                   "appSettings": [
                     {

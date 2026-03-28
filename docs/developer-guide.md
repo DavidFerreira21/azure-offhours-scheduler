@@ -112,12 +112,13 @@ Fluxo correto:
 2. rodar testes
 3. montar bundle com `scripts/prepare_function_app_publish.sh`
 4. gerar o zip com `scripts/build_function_app_package.sh`
-5. publicar a Function com `az functionapp deployment source config-zip --build-remote true`
+5. publicar a Function com `az functionapp deployment source config-zip --build-remote false`
 6. sincronizar os triggers
 7. confirmar que `OffHoursTimer` foi registrado
 
 Observacao:
 
+- o bundle de publish agora leva `.python_packages` com as dependencias de runtime
 - o wrapper atual garante registro da funcao antes de concluir
 - isso nao significa necessariamente host totalmente aquecido no mesmo instante
 
