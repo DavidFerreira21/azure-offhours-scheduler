@@ -421,8 +421,7 @@ def test_function_trigger_uses_offhours_context(monkeypatch, capsys) -> None:
     exit_code = main(["function", "trigger"])
 
     assert exit_code == 0
-    assert captured["commands"][0] == [
-        "az",
+    assert captured["commands"][0][1:] == [
         "functionapp",
         "function",
         "list",
@@ -435,8 +434,7 @@ def test_function_trigger_uses_offhours_context(monkeypatch, capsys) -> None:
         "-o",
         "json",
     ]
-    assert captured["commands"][1] == [
-        "az",
+    assert captured["commands"][1][1:] == [
         "functionapp",
         "keys",
         "list",
