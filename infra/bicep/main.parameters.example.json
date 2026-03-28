@@ -3,13 +3,28 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "resourceGroupName": {
-      "value": "rg-offhours-scheduler"
+      "value": ""
     },
     "location": {
       "value": "eastus"
     },
     "namePrefix": {
       "value": "offhours"
+    },
+    "functionAppName": {
+      "value": ""
+    },
+    "storageAccountName": {
+      "value": ""
+    },
+    "logAnalyticsName": {
+      "value": ""
+    },
+    "appInsightsName": {
+      "value": ""
+    },
+    "planName": {
+      "value": ""
     },
     "useExistingPlan": {
       "value": false
@@ -45,9 +60,6 @@
     },
     "stateTableName": {
       "value": "OffHoursSchedulerState"
-    },
-    "bootstrapDefaults": {
-      "value": true
     },
     "tableOperatorsGroupObjectId": {
       "value": "00000000-0000-0000-0000-000000000000"

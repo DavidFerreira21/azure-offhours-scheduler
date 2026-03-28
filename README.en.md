@@ -1,6 +1,5 @@
 # Azure OffHours Scheduler
 
-![CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.12-blue.svg)
 
@@ -70,22 +69,95 @@ Setup:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp infra/bicep/main.parameters.example.json infra/bicep/main.parameters.json
 az login
 ```
+
+Use `infra/bicep/main.parameters.json` as the main deployment file.
+If you need to inspect more advanced template options, see `infra/bicep/main.parameters.example.json`.
+If `resourceGroupName` is left empty, the deployment wrapper automatically generates `rg-<namePrefix>-<suffix>`.
 
 Deploy:
 
 ```bash
-./scripts/deploy_scheduler.sh --parameters-file infra/bicep/main.parameters.json
+make deploy
+```
+
+Or:
+
+```bash
+./scripts/deploy_scheduler.sh
 ```
 
 Minimum parameters:
 
-- `resourceGroupName`
 - `location`
 - `namePrefix`
 - `subscriptionIds` or `managementGroupIds`
+
+Useful optional parameter:
+
+- `resourceGroupName`
+  If set, it forces a stable resource group name. If left empty, the deployment generates one automatically from `namePrefix`.
+
+Required for CLI-based operations:
+
+- `tableOperatorsGroupObjectId`
+
+Without this group, the Function can still run, but human operators will not be able to apply `config` and `schedule` changes through `./offhours` using Microsoft Entra ID.
+
+Recommended models:
+
+- use an existing Microsoft Entra group that already contains the operators
+- create a dedicated group such as `azure-offhours-operators`, add the users, and pass its `objectId` in the deployment
+
+The recommended flow already publishes the Function, syncs triggers, registers `OffHoursTimer` in Azure, and writes `.offhours.env` for the local CLI.
+
+Recommended initial seed through the CLI:
+
+```bash
+az logout
+az login
+./offhours config apply --file runtime.yaml --execute
+./offhours schedule apply --file business-hours.yaml --execute
+```
+
+- `az logout` / `az login`
+  If the deployment just created table RBAC for the operator group, you may need to refresh local Azure CLI credentials before the first `apply`.
+- `config apply --file runtime.yaml --execute`
+  Creates or updates the global scheduler configuration in `OffHoursSchedulerConfig`, including behavior such as `DRY_RUN`, default timezone, schedule tag key, and retain rules.
+- `schedule apply --file business-hours.yaml --execute`
+  Creates or updates the `business-hours` schedule in `OffHoursSchedulerSchedules`, with the operating window that will be referenced by resource tags.
+
+## Operational CLI
+
+Daily operation is done through the repository-local CLI:
+
+```bash
+./offhours --help
+```
+
+The CLI uses `DefaultAzureCredential` by default, so operator access to the scheduler tables normally comes from the group configured in `tableOperatorsGroupObjectId`.
+
+Typical commands:
+
+```bash
+./offhours config get
+./offhours config apply --file runtime.yaml
+./offhours schedule list
+./offhours schedule get business-hours
+./offhours schedule apply --file business-hours.yaml
+./offhours schedule delete business-hours
+./offhours state list
+./offhours function trigger
+```
+
+Recommended post-deploy validation:
+
+```bash
+./offhours state list
+./offhours function trigger
+./offhours state list
+```
 
 ## Example Usage
 
@@ -97,32 +169,28 @@ schedule=business-hours
 
 Simple schedule example:
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "business-hours",
-  "Start": "08:00",
-  "Stop": "18:00",
-  "SkipDays": "saturday,sunday",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-19T12:00:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+RowKey: business-hours
+Start: "08:00"
+Stop: "18:00"
+SkipDays:
+  - saturday
+  - sunday
+Enabled: true
+Version: "1"
 ```
 
 Preferred format for richer schedule windows:
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "office-hours-split",
-  "Periods": "[{\"start\":\"08:00\",\"stop\":\"12:00\"},{\"start\":\"13:00\",\"stop\":\"18:00\"}]",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-19T12:00:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+RowKey: office-hours-split
+Periods:
+  - start: "08:00"
+    stop: "12:00"
+  - start: "13:00"
+    stop: "18:00"
+Enabled: true
+Version: "1"
 ```
 
 ## Use Cases
@@ -139,7 +207,6 @@ Preferred format for richer schedule windows:
 - Retain behavior for manual operator overrides
 - Regional filtering with `targetResourceLocations`
 - Technical timer configuration via `TIMER_SCHEDULE`
-- Default bootstrap on first deployment
 - Clean deployment flow with Bicep
 
 ## Observability

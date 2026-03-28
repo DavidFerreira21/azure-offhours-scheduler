@@ -58,9 +58,6 @@ param scheduleTableName string = 'OffHoursSchedulerSchedules'
 @description('Azure Table Storage table name used for scheduler state.')
 param stateTableName string = 'OffHoursSchedulerState'
 
-@description('When true, seed the configuration tables with the default bootstrap.')
-param bootstrapDefaults bool = true
-
 @description('Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account.')
 param tableOperatorsGroupObjectId string = ''
 
@@ -153,124 +150,6 @@ resource existingPlan 'Microsoft.Web/serverfarms@2022-09-01' existing = if (useE
 
 var serverFarmId = useExistingPlan ? existingPlan.id : plan.id
 var tableServiceUri = 'https://${storage.name}.table.${environment().suffixes.storage}'
-
-resource bootstrapScriptIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (bootstrapDefaults) {
-  name: '${functionAppName}-bootstrap-id'
-  location: location
-}
-
-resource bootstrapStorageTableContributorAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (bootstrapDefaults) {
-  name: guid(storage.id, bootstrapScriptIdentity!.id, storageTableDataContributorRoleDefinitionId)
-  scope: storage
-  properties: {
-    roleDefinitionId: storageTableDataContributorRoleDefinitionId
-    principalId: bootstrapScriptIdentity!.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource bootstrapDefaultsScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (bootstrapDefaults) {
-  name: 'bootstrap-scheduler-defaults'
-  location: location
-  kind: 'AzureCLI'
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${bootstrapScriptIdentity!.id}': {}
-    }
-  }
-  properties: {
-    azCliVersion: '2.61.0'
-    cleanupPreference: 'OnSuccess'
-    retentionInterval: 'P1D'
-    timeout: 'PT15M'
-    forceUpdateTag: deployment().name
-    environmentVariables: [
-      {
-        name: 'BOOTSTRAP_STORAGE_ACCOUNT'
-        value: storage.name
-      }
-      {
-        name: 'BOOTSTRAP_CONFIG_TABLE'
-        value: configTableName
-      }
-      {
-        name: 'BOOTSTRAP_SCHEDULE_TABLE'
-        value: scheduleTableName
-      }
-      {
-        name: 'BOOTSTRAP_UPDATED_BY'
-        value: 'bicep-bootstrap'
-      }
-    ]
-    scriptContent: '''
-      set -euo pipefail
-
-      updated_at_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
-      entity_exists() {
-        local table_name="$1"
-        local partition_key="$2"
-        local row_key="$3"
-
-        az storage entity show \
-          --account-name "$BOOTSTRAP_STORAGE_ACCOUNT" \
-          --auth-mode login \
-          --table-name "$table_name" \
-          --partition-key "$partition_key" \
-          --row-key "$row_key" \
-          --only-show-errors \
-          -o none >/dev/null 2>&1
-      }
-
-      if ! entity_exists "$BOOTSTRAP_CONFIG_TABLE" "GLOBAL" "runtime"; then
-        az storage entity insert \
-          --account-name "$BOOTSTRAP_STORAGE_ACCOUNT" \
-          --auth-mode login \
-          --table-name "$BOOTSTRAP_CONFIG_TABLE" \
-          --if-exists fail \
-          --entity \
-            PartitionKey=GLOBAL \
-            RowKey=runtime \
-            DRY_RUN=false \
-            DEFAULT_TIMEZONE=America/Sao_Paulo \
-            SCHEDULE_TAG_KEY=schedule \
-            RETAIN_RUNNING=false \
-            RETAIN_STOPPED=false \
-            Version=1 \
-            UpdatedAtUtc="$updated_at_utc" \
-            UpdatedBy="$BOOTSTRAP_UPDATED_BY" \
-          --only-show-errors \
-          -o none
-      fi
-
-      if ! entity_exists "$BOOTSTRAP_SCHEDULE_TABLE" "SCHEDULE" "business-hours"; then
-        az storage entity insert \
-          --account-name "$BOOTSTRAP_STORAGE_ACCOUNT" \
-          --auth-mode login \
-          --table-name "$BOOTSTRAP_SCHEDULE_TABLE" \
-          --if-exists fail \
-          --entity \
-            PartitionKey=SCHEDULE \
-            RowKey=business-hours \
-            Start=08:00 \
-            Stop=18:00 \
-            SkipDays=saturday,sunday \
-            Enabled=true \
-            Version=1 \
-            UpdatedAtUtc="$updated_at_utc" \
-            UpdatedBy="$BOOTSTRAP_UPDATED_BY" \
-          --only-show-errors \
-          -o none
-      fi
-    '''
-  }
-  dependsOn: [
-    bootstrapStorageTableContributorAssignment
-    configTable
-    scheduleTable
-  ]
-}
 
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName

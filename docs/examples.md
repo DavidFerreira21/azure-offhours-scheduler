@@ -1,60 +1,74 @@
 # Exemplos
 
-Este documento traz exemplos prontos para uso em testes, operacao inicial e entendimento do modelo de tabelas.
+Este documento traz exemplos prontos para uso operacional com a CLI `./offhours`.
+Para operacao do dia a dia, o formato recomendado e YAML. Exemplos de entidades JSON brutas ficam em `architecture.md` quando voce precisar consultar o schema de tabela.
 
-Observacao importante:
+Observacoes importantes:
 
-- campos booleanos devem ser gravados como boolean quando possivel
-- use `true` / `false` para `DRY_RUN`, `RETAIN_RUNNING`, `RETAIN_STOPPED` e `Enabled`
-- evite texto livre em campos booleanos para nao quebrar a validacao operacional
-- para schedules, `Periods` e o formato preferido/oficial
-- `Start` e `Stop` continuam suportados como atalho para janelas simples e operacao manual no Portal
-- `RETAIN_RUNNING` e temporario no comportamento atual
+- use boolean real (`true` e `false`) para `DRY_RUN`, `RETAIN_RUNNING`, `RETAIN_STOPPED` e `Enabled`
+- para schedules, `Periods` e o formato preferido
+- `Start` e `Stop` continuam suportados como atalho para janelas simples
+- deixe `UpdatedAtUtc` e `UpdatedBy` para a CLI preencher no `apply`
+- `RETAIN_RUNNING` continua temporario no comportamento atual
 - `RETAIN_STOPPED` continua persistente no comportamento atual
+- se o deploy acabou de criar RBAC para tabelas, pode ser necessario rodar `az logout` e `az login` antes do primeiro `apply`
 
-## 1. Exemplo Minimo de Config Global
+## 1. Config Global Minima
 
-Tabela:
+Arquivo `runtime.yaml`:
 
-- `OffHoursSchedulerConfig`
-
-Entidade:
-
-```json
-{
-  "PartitionKey": "GLOBAL",
-  "RowKey": "runtime",
-  "DRY_RUN": true,
-  "DEFAULT_TIMEZONE": "America/Sao_Paulo",
-  "SCHEDULE_TAG_KEY": "schedule",
-  "RETAIN_RUNNING": false,
-  "RETAIN_STOPPED": false,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-17T12:00:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+DRY_RUN: true
+DEFAULT_TIMEZONE: America/Sao_Paulo
+SCHEDULE_TAG_KEY: schedule
+RETAIN_RUNNING: false
+RETAIN_STOPPED: false
+Version: "1"
 ```
 
-## 2. Exemplo Minimo de Schedule Simples
+Aplicar com preview:
 
-Tabela:
+```bash
+./offhours config apply --file runtime.yaml
+```
 
-- `OffHoursSchedulerSchedules`
+Aplicar de verdade:
 
-Entidade:
+```bash
+./offhours config apply --file runtime.yaml --execute
+```
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "business-hours",
-  "Start": "08:00",
-  "Stop": "18:00",
-  "SkipDays": "saturday,sunday",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-17T12:05:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+Consultar depois:
+
+```bash
+./offhours config get
+```
+
+## 2. Schedule Simples
+
+Arquivo `business-hours.yaml`:
+
+```yaml
+RowKey: business-hours
+Start: "08:00"
+Stop: "18:00"
+SkipDays:
+  - saturday
+  - sunday
+Enabled: true
+Version: "1"
+```
+
+Aplicar com preview:
+
+```bash
+./offhours schedule apply --file business-hours.yaml
+```
+
+Aplicar de verdade:
+
+```bash
+./offhours schedule apply --file business-hours.yaml --execute
 ```
 
 Tag no recurso:
@@ -63,69 +77,74 @@ Tag no recurso:
 schedule=business-hours
 ```
 
-## 3. Exemplo de Schedule com Multiplas Janelas
+## 3. Schedule com Multiplas Janelas
 
-Entidade:
+Arquivo `office-hours.yaml`:
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "office-hours",
-  "Periods": "[{\"start\":\"08:00\",\"stop\":\"12:00\"},{\"start\":\"13:00\",\"stop\":\"18:00\"}]",
-  "SkipDays": "saturday,sunday",
-  "Enabled": true,
-  "Version": "2",
-  "UpdatedAtUtc": "2026-03-17T12:10:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+RowKey: office-hours
+Periods:
+  - start: "08:00"
+    stop: "12:00"
+  - start: "13:00"
+    stop: "18:00"
+SkipDays:
+  - saturday
+  - sunday
+Enabled: true
+Version: "2"
 ```
 
-## 4. Exemplo de Escopo por Subscription
+Esse e o formato preferido para schedules novos.
 
-Entidade:
+## 4. Schedule com Escopo por Subscription
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "prod-office-hours",
-  "Start": "07:00",
-  "Stop": "19:00",
-  "IncludeSubscriptions": "sub-a,sub-b",
-  "ExcludeSubscriptions": "sub-b",
-  "Enabled": true,
-  "Version": "3",
-  "UpdatedAtUtc": "2026-03-17T12:15:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+Arquivo `prod-office-hours.yaml`:
+
+```yaml
+RowKey: prod-office-hours
+Start: "07:00"
+Stop: "19:00"
+IncludeSubscriptions:
+  - sub-a
+  - sub-b
+ExcludeSubscriptions:
+  - sub-b
+Enabled: true
+Version: "3"
 ```
 
 Leitura pratica:
 
-- `sub-a`: entra
-- `sub-b`: fica fora porque `exclude` vence
+- `sub-a` entra
+- `sub-b` fica fora porque `exclude` vence
 
-## 5. Exemplo de Escopo por Management Group
+## 5. Schedule com Escopo por Management Group
 
-Entidade:
+Arquivo `shared-services.yaml`:
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "shared-services",
-  "Start": "08:00",
-  "Stop": "20:00",
-  "IncludeManagementGroups": "mg-shared,mg-platform",
-  "ExcludeManagementGroups": "mg-blocked",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-17T12:20:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+RowKey: shared-services
+Start: "08:00"
+Stop: "20:00"
+IncludeManagementGroups:
+  - mg-shared
+  - mg-platform
+ExcludeManagementGroups:
+  - mg-blocked
+Enabled: true
+Version: "1"
 ```
 
-## 6. Exemplo de VM com Timezone Local
+## 6. Tags no Recurso
 
-Tags:
+Tag minima:
+
+```text
+schedule=office-hours
+```
+
+Com timezone por recurso:
 
 ```text
 schedule=office-hours
@@ -138,7 +157,50 @@ Nesse caso:
 - o timezone da avaliacao vem da tag do recurso
 - se a tag faltar, o fallback e `DEFAULT_TIMEZONE`
 
-## 7. Exemplo de Escopo Tecnico por Subscriptions
+## 7. Validacao Segura Inicial
+
+Sequencia recomendada:
+
+1. suba a infra
+2. deixe `DRY_RUN=true` em `runtime.yaml` se quiser validar sem acao real
+3. aplique `runtime.yaml`
+4. aplique `business-hours.yaml`
+5. marque uma VM de teste com `schedule=business-hours`
+6. rode `./offhours state list`
+7. rode `./offhours function trigger`
+8. rode `./offhours state list` novamente
+9. so depois troque `DRY_RUN` para `false`
+
+Comandos uteis:
+
+```bash
+./offhours state list
+./offhours function trigger
+./offhours schedule get business-hours
+./offhours config get
+```
+
+## 8. Seed Inicial Pela CLI
+
+Depois do deploy, o caminho recomendado e aplicar a configuracao e os schedules explicitamente pela CLI.
+
+Se o deploy acabou de criar `Storage Table Data Contributor` para o grupo operador, faca antes:
+
+```bash
+az logout
+az login
+```
+
+Conferir e aplicar:
+
+```bash
+./offhours config get
+./offhours config apply --file runtime.yaml --execute
+./offhours schedule list
+./offhours schedule apply --file business-hours.yaml --execute
+```
+
+## 9. Escopo Tecnico por Subscriptions
 
 Trecho de `infra/bicep/main.parameters.json`:
 
@@ -161,7 +223,7 @@ Trecho de `infra/bicep/main.parameters.json`:
 }
 ```
 
-## 8. Exemplo de Escopo Tecnico por Management Groups
+## 10. Escopo Tecnico por Management Groups
 
 Trecho de `infra/bicep/main.parameters.json`:
 
@@ -186,7 +248,7 @@ Trecho de `infra/bicep/main.parameters.json`:
 }
 ```
 
-## 9. Exemplo de Filtro Regional
+## 11. Filtro Regional
 
 Trecho de `infra/bicep/main.parameters.json`:
 
@@ -217,59 +279,5 @@ Se quiser todas as regioes:
       "value": []
     }
   }
-}
-```
-
-## 10. Exemplo de Teste Seguro Inicial
-
-Passo a passo recomendado:
-
-1. subir a infra
-2. ajustar `DRY_RUN=true` se quiser uma validacao inicial sem acao real
-3. criar `business-hours`
-4. marcar uma VM com:
-
-```text
-schedule=business-hours
-```
-
-5. acompanhar logs da Function
-6. validar se a decisao calculada esta correta
-7. so depois mudar `DRY_RUN` para `false`
-
-## 11. Exemplo de Bootstrap Default
-
-O bootstrap default cria:
-
-Config:
-
-```json
-{
-  "PartitionKey": "GLOBAL",
-  "RowKey": "runtime",
-  "DRY_RUN": false,
-  "DEFAULT_TIMEZONE": "America/Sao_Paulo",
-  "SCHEDULE_TAG_KEY": "schedule",
-  "RETAIN_RUNNING": false,
-  "RETAIN_STOPPED": false,
-  "Version": "1",
-  "UpdatedAtUtc": "<utc-now>",
-  "UpdatedBy": "<operator>"
-}
-```
-
-Schedule:
-
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "business-hours",
-  "Start": "08:00",
-  "Stop": "18:00",
-  "SkipDays": "saturday,sunday",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "<utc-now>",
-  "UpdatedBy": "<operator>"
 }
 ```

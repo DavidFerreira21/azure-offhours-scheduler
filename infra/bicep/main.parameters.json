@@ -2,40 +2,28 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "tableOperatorsGroupObjectId": {
-      "value": ""
-},
     "resourceGroupName": {
-      "value": "rg-offhours-scheduler-985524"
+      "value": ""
     },
     "location": {
       "value": "eastus"
     },
+    "tableOperatorsGroupObjectId": {
+      "value": "f2643b9a-c72d-45a3-a213-81f4bd35de61"
+    },
     "namePrefix": {
       "value": "offhours"
     },
-    "useExistingPlan": {
-      "value": false
-    },
     "subscriptionIds": {
-      "value": [
-        ""
-      ]
+      "value": []
     },
     "managementGroupIds": {
-      "value": []
+      "value": [
+        "cb1d6b41-0bdd-4155-96a2-2e4c5e2f3443"
+      ]
     },
     "excludeSubscriptionIds": {
       "value": []
-    },
-    "targetResourceLocations": {
-      "value": []
-    },
-    "timerSchedule": {
-      "value": "0 */15 * * * *"
-    },
-    "maxWorkers": {
-      "value": 5
     }
   }
 }

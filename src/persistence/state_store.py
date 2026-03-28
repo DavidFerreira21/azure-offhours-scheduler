@@ -73,7 +73,7 @@ class AzureTableStateStore:
     def _canonical_resource_id(resource) -> str:
         resource_id = str(getattr(resource, "id", "") or "").strip()
         if resource_id:
-            return resource_id.rstrip("/").lower()
+            return canonical_resource_id(resource_id)
 
         subscription_id = str(getattr(resource, "subscription_id", "") or "").strip().lower()
         resource_group = str(getattr(resource, "resource_group", "") or "").strip().lower()
@@ -141,3 +141,21 @@ class AzureTableStateStore:
         }
 
         table.upsert_entity(mode=UpdateMode.MERGE, entity=entity)
+
+
+def canonical_resource_id(resource_id: str) -> str:
+    return str(resource_id or "").strip().rstrip("/").lower()
+
+
+def state_entity_keys_from_resource_id(resource_id: str) -> tuple[str, str]:
+    normalized_resource_id = canonical_resource_id(resource_id)
+    marker = "/subscriptions/"
+    if marker not in normalized_resource_id:
+        raise ValueError("resource_id must contain '/subscriptions/<subscription-id>'")
+
+    subscription_id = normalized_resource_id.split(marker, 1)[1].split("/", 1)[0].strip()
+    if not subscription_id:
+        raise ValueError("resource_id must include a subscription id")
+
+    row_key = hashlib.sha1(normalized_resource_id.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return subscription_id, row_key

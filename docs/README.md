@@ -12,11 +12,11 @@ Use este índice para encontrar rapidamente o documento certo para cada perfil d
 ## Quero Operar no Azure
 
 - `operator-guide.md`
-  Guia operacional para editar config, criar schedules, aplicar tags e validar execuções.
+  Guia operacional para usar `./offhours`, editar config, criar schedules, disparar a Function manualmente, consultar state e validar execuções.
 - `examples.md`
-  Exemplos prontos de entidades, tags, schedules e escopo.
+  Exemplos operacionais com CLI, YAML, tags, schedules e escopo.
 - `troubleshooting.md`
-  Problemas comuns de desenvolvimento local, deploy e runtime.
+  Problemas comuns de desenvolvimento local, deploy, runtime e uso da CLI.
 
 ## Quero Alterar o Código
 

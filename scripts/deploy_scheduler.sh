@@ -4,30 +4,29 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/deploy_scheduler.sh --parameters-file <file> [options]
-
-Required:
-  --parameters-file <file>   Path to the Bicep parameters file
+  ./scripts/deploy_scheduler.sh [options]
 
 Optional:
+  --parameters-file <file>   Default: infra/bicep/main.parameters.json
   --deployment-name <name>   Default: offhours-scheduler-deploy
-  --no-publish               Deploy infra and bootstrap tables, but skip Function publish
+  --no-validate              Skip az deployment sub validate before create
+  --no-publish               Deploy infra, but skip Function publish
 
 Pre-requisites checked automatically:
   - az CLI installed and authenticated
   - active Azure subscription selected
   - access to the effective scheduler scope resolved from subscriptionIds + managementGroupIds - excludeSubscriptionIds
-  - Bicep subscription deployment validation succeeds
-  - func Core Tools installed when publish is enabled
 EOF
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PARAMETERS_FILE=""
+PARAMETERS_FILE="$ROOT_DIR/infra/bicep/main.parameters.json"
 DEPLOYMENT_NAME="offhours-scheduler-deploy"
 PUBLISH_FUNCTION=true
+VALIDATE_DEPLOYMENT=true
 DEPLOY_LOCATION=""
 RESOURCE_GROUP_NAME=""
+RESOURCE_GROUP_NAME_GENERATED=false
 NAME_PREFIX=""
 TABLE_OPERATORS_GROUP_OBJECT_ID=""
 EXPLICIT_SUBSCRIPTIONS=()
@@ -36,6 +35,9 @@ EXCLUDE_SUBSCRIPTIONS=()
 EFFECTIVE_SUBSCRIPTIONS=()
 TARGET_RESOURCE_LOCATIONS=()
 RESOLVED_PARAMETERS_FILE=""
+OFFHOURS_CONTEXT_FILE=""
+CURRENT_SUBSCRIPTION_ID=""
+FUNCTION_PACKAGE_PATH=""
 
 fail() {
   echo "ERROR: $*" >&2
@@ -45,6 +47,27 @@ fail() {
 require_command() {
   local command_name="$1"
   command -v "$command_name" >/dev/null 2>&1 || fail "Missing required command '$command_name'."
+}
+
+generate_random_suffix() {
+  python3 - <<'PY'
+import secrets
+
+alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+print("".join(secrets.choice(alphabet) for _ in range(6)))
+PY
+}
+
+generate_resource_group_name() {
+  local normalized_prefix="${NAME_PREFIX,,}"
+  normalized_prefix="${normalized_prefix//_/-}"
+  normalized_prefix="${normalized_prefix// /-}"
+
+  if [[ -z "$normalized_prefix" ]]; then
+    normalized_prefix="offhours"
+  fi
+
+  printf 'rg-%s-%s\n' "$normalized_prefix" "$(generate_random_suffix)"
 }
 
 read_parameter() {
@@ -86,6 +109,7 @@ check_azure_login() {
 
   echo "Azure account: $current_user"
   echo "Active subscription: $current_subscription"
+  CURRENT_SUBSCRIPTION_ID="$current_subscription"
 }
 
 load_parameters() {
@@ -99,11 +123,15 @@ load_parameters() {
   mapfile -t EXCLUDE_SUBSCRIPTIONS < <(read_parameter excludeSubscriptionIds)
   mapfile -t TARGET_RESOURCE_LOCATIONS < <(read_parameter targetResourceLocations)
 
-  [[ -n "$RESOURCE_GROUP_NAME" ]] || fail "Parameter 'resourceGroupName' is required in $PARAMETERS_FILE."
   [[ -n "$NAME_PREFIX" ]] || fail "Parameter 'namePrefix' is required in $PARAMETERS_FILE."
 
   if [[ -z "$DEPLOY_LOCATION" ]]; then
     DEPLOY_LOCATION="eastus"
+  fi
+
+  if [[ -z "$RESOURCE_GROUP_NAME" ]]; then
+    RESOURCE_GROUP_NAME="$(generate_resource_group_name)"
+    RESOURCE_GROUP_NAME_GENERATED=true
   fi
 
   if [[ "${#EXPLICIT_SUBSCRIPTIONS[@]}" -eq 0 && "${#MANAGEMENT_GROUP_IDS[@]}" -eq 0 ]]; then
@@ -195,19 +223,21 @@ check_target_subscriptions() {
 build_resolved_parameters_file() {
   RESOLVED_PARAMETERS_FILE="$(mktemp /tmp/offhours-params.XXXXXX.json)"
 
-  python3 - "$PARAMETERS_FILE" "$RESOLVED_PARAMETERS_FILE" "${EFFECTIVE_SUBSCRIPTIONS[@]}" <<'PY'
+  python3 - "$PARAMETERS_FILE" "$RESOLVED_PARAMETERS_FILE" "$RESOURCE_GROUP_NAME" "${EFFECTIVE_SUBSCRIPTIONS[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 source_path = Path(sys.argv[1])
 target_path = Path(sys.argv[2])
-effective_subscriptions = sys.argv[3:]
+resource_group_name = sys.argv[3]
+effective_subscriptions = sys.argv[4:]
 
 with source_path.open("r", encoding="utf-8") as handle:
     data = json.load(handle)
 
 parameters = data.setdefault("parameters", {})
+parameters["resourceGroupName"] = {"value": resource_group_name}
 parameters["subscriptionIds"] = {"value": effective_subscriptions}
 
 with target_path.open("w", encoding="utf-8") as handle:
@@ -220,6 +250,34 @@ cleanup() {
   if [[ -n "$RESOLVED_PARAMETERS_FILE" && -f "$RESOLVED_PARAMETERS_FILE" ]]; then
     rm -f "$RESOLVED_PARAMETERS_FILE"
   fi
+  if [[ -n "$FUNCTION_PACKAGE_PATH" && -f "$FUNCTION_PACKAGE_PATH" ]]; then
+    rm -f "$FUNCTION_PACKAGE_PATH"
+  fi
+}
+
+write_offhours_context() {
+  local storage_suffix
+  local table_service_uri
+
+  storage_suffix="$(
+    az cloud show \
+      --query suffixes.storageEndpoint \
+      -o tsv
+  )"
+
+  [[ -n "$storage_suffix" ]] || fail "Unable to resolve Azure storage endpoint suffix."
+
+  table_service_uri="https://${STORAGE_ACCOUNT_NAME}.table.${storage_suffix}"
+  OFFHOURS_CONTEXT_FILE="$ROOT_DIR/.offhours.env"
+
+  cat >"$OFFHOURS_CONTEXT_FILE" <<EOF
+OFFHOURS_RESOURCE_GROUP=$RESOURCE_GROUP
+OFFHOURS_FUNCTION_APP_NAME=$FUNCTION_APP_NAME
+OFFHOURS_STORAGE_ACCOUNT_NAME=$STORAGE_ACCOUNT_NAME
+OFFHOURS_TABLE_SERVICE_URI=$table_service_uri
+EOF
+
+  echo "Wrote CLI context to $OFFHOURS_CONTEXT_FILE"
 }
 
 validate_deployment() {
@@ -228,17 +286,107 @@ validate_deployment() {
     --name "${DEPLOYMENT_NAME}-validate" \
     --location "$DEPLOY_LOCATION" \
     --template-file "$ROOT_DIR/infra/bicep/main.bicep" \
-    --parameters @"$RESOLVED_PARAMETERS_FILE" bootstrapDefaults=false \
+    --parameters @"$RESOLVED_PARAMETERS_FILE" \
     --only-show-errors \
     -o none || fail "Bicep validation failed. Check permissions and parameter values."
 }
 
+build_function_package() {
+  echo "Building Function App zip package..."
+  FUNCTION_PACKAGE_PATH="$("$ROOT_DIR/scripts/build_function_app_package.sh" /tmp/offhours-function-package.zip)"
+  [[ -f "$FUNCTION_PACKAGE_PATH" ]] || fail "Function App package was not created."
+  echo "Function App package: $FUNCTION_PACKAGE_PATH"
+}
+
+publish_function_package() {
+  printf '%s\n' "Publishing Function App $FUNCTION_APP_NAME with zip deploy..."
+  printf '%s\n' "This step may take several minutes because Azure performs remote build, package extraction, and trigger registration."
+  az functionapp deployment source config-zip \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$FUNCTION_APP_NAME" \
+    --src "$FUNCTION_PACKAGE_PATH" \
+    --build-remote true \
+    --timeout 600 \
+    --only-show-errors \
+    -o none || fail "Function App zip deployment failed."
+}
+
+sync_function_triggers() {
+  local max_attempts=6
+  local attempt=1
+
+  while [[ "$attempt" -le "$max_attempts" ]]; do
+    echo "Synchronizing Function App triggers (attempt $attempt/$max_attempts)..."
+    if az rest \
+      --method post \
+      --url "https://management.azure.com/subscriptions/$CURRENT_SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Web/sites/$FUNCTION_APP_NAME/syncfunctiontriggers?api-version=2024-04-01" \
+      --only-show-errors \
+      -o none; then
+      return 0
+    fi
+
+    if [[ "$attempt" -lt "$max_attempts" ]]; then
+      echo "Trigger sync is not ready yet; waiting before retry."
+      sleep 10
+    fi
+
+    attempt=$((attempt + 1))
+  done
+
+  echo "Trigger sync did not succeed after $max_attempts attempts; continuing with function registration checks."
+  return 1
+}
+
+query_published_function_name() {
+  local expected_function_name="$1"
+
+  timeout 10s \
+    az functionapp function list \
+      --resource-group "$RESOURCE_GROUP" \
+      --name "$FUNCTION_APP_NAME" \
+      --query "[?ends_with(name, '/$expected_function_name')].name | [0]" \
+      --only-show-errors \
+      -o tsv 2>/dev/null || true
+}
+
+wait_for_published_function() {
+  local expected_function_name="OffHoursTimer"
+  local max_attempts=24
+  local attempt=1
+  local published_name=""
+
+  while [[ "$attempt" -le "$max_attempts" ]]; do
+    published_name="$(query_published_function_name "$expected_function_name")"
+
+    if [[ -n "$published_name" ]]; then
+      echo "Function '$expected_function_name' is registered."
+      return 0
+    fi
+
+    echo "Function '$expected_function_name' is not registered yet (attempt $attempt/$max_attempts)."
+
+    if [[ "$attempt" -eq 3 || "$attempt" -eq 9 || "$attempt" -eq 18 || "$attempt" -eq 27 ]]; then
+      sync_function_triggers || true
+    fi
+
+    sleep 10
+    attempt=$((attempt + 1))
+  done
+
+  fail "Function '$expected_function_name' was not registered after publish."
+}
+
 print_preflight_summary() {
   echo "Preflight summary:"
-  echo "  - Resource group: $RESOURCE_GROUP_NAME"
+  if [[ "$RESOURCE_GROUP_NAME_GENERATED" == "true" ]]; then
+    echo "  - Resource group: $RESOURCE_GROUP_NAME (auto-generated)"
+  else
+    echo "  - Resource group: $RESOURCE_GROUP_NAME"
+  fi
   echo "  - Location: $DEPLOY_LOCATION"
   echo "  - Name prefix: $NAME_PREFIX"
   echo "  - Publish Function App: $PUBLISH_FUNCTION"
+  echo "  - Validate deployment: $VALIDATE_DEPLOYMENT"
   if [[ "${#EXPLICIT_SUBSCRIPTIONS[@]}" -gt 0 ]]; then
     echo "  - Explicit subscriptions: ${EXPLICIT_SUBSCRIPTIONS[*]}"
   else
@@ -278,6 +426,10 @@ while [[ $# -gt 0 ]]; do
       DEPLOYMENT_NAME="$2"
       shift 2
       ;;
+    --no-validate)
+      VALIDATE_DEPLOYMENT=false
+      shift
+      ;;
     --no-publish)
       PUBLISH_FUNCTION=false
       shift
@@ -294,17 +446,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$PARAMETERS_FILE" ]]; then
-  usage >&2
-  exit 1
-fi
-
 require_command realpath
 require_command python3
 require_command az
-if [[ "$PUBLISH_FUNCTION" == "true" ]]; then
-  require_command func
-fi
 
 trap cleanup EXIT
 
@@ -317,14 +461,20 @@ resolve_effective_subscriptions
 build_resolved_parameters_file
 check_target_subscriptions
 print_preflight_summary
-validate_deployment
 
-echo "Deploying infrastructure with manual bootstrap fallback..."
+if [[ "$VALIDATE_DEPLOYMENT" == "true" ]]; then
+  validate_deployment
+else
+  echo "Skipping subscription-scope validation."
+fi
+
+printf '%s\n' "Deploying infrastructure..."
+printf '%s\n' "This step may take several minutes, especially when Azure needs to create RBAC assignments and platform resources."
 az deployment sub create \
   --name "$DEPLOYMENT_NAME" \
   --location "$DEPLOY_LOCATION" \
   --template-file "$ROOT_DIR/infra/bicep/main.bicep" \
-  --parameters @"$RESOLVED_PARAMETERS_FILE" bootstrapDefaults=false \
+  --parameters @"$RESOLVED_PARAMETERS_FILE" \
   --only-show-errors \
   -o none
 
@@ -349,10 +499,7 @@ STORAGE_ACCOUNT_NAME="$(
     -o tsv
 )"
 
-echo "Bootstrapping scheduler tables in storage account $STORAGE_ACCOUNT_NAME..."
-"$ROOT_DIR/scripts/bootstrap_scheduler_tables.sh" \
-  --resource-group "$RESOURCE_GROUP" \
-  --storage-account "$STORAGE_ACCOUNT_NAME"
+write_offhours_context
 
 if [[ "$PUBLISH_FUNCTION" == "false" ]]; then
   echo "Skipping Function publish."
@@ -360,19 +507,33 @@ if [[ "$PUBLISH_FUNCTION" == "false" ]]; then
   echo "Resource group: $RESOURCE_GROUP"
   echo "Function App: $FUNCTION_APP_NAME"
   echo "Storage Account: $STORAGE_ACCOUNT_NAME"
+  echo "Next steps:"
+  echo "  1. If table RBAC was created during this deploy, you may need to refresh Azure CLI credentials:"
+  echo "     az logout"
+  echo "     az login"
+  echo "  2. Apply the initial scheduler configuration:"
+  echo "     ./offhours config apply --file runtime.yaml --execute"
+  echo "  3. Apply the initial schedule:"
+  echo "     ./offhours schedule apply --file business-hours.yaml --execute"
   exit 0
 fi
 
-echo "Preparing Function App publish bundle..."
+printf '%s\n' "Preparing Function App publish bundle..."
 "$ROOT_DIR/scripts/prepare_function_app_publish.sh"
-
-echo "Publishing Function App $FUNCTION_APP_NAME..."
-(
-  cd "$ROOT_DIR/function"
-  func azure functionapp publish "$FUNCTION_APP_NAME" --python --build remote
-)
+build_function_package
+publish_function_package
+sync_function_triggers
+wait_for_published_function
 
 echo "Deployment completed."
 echo "Resource group: $RESOURCE_GROUP"
 echo "Function App: $FUNCTION_APP_NAME"
 echo "Storage Account: $STORAGE_ACCOUNT_NAME"
+echo "Next steps:"
+echo "  1. If table RBAC was created during this deploy, you may need to refresh Azure CLI credentials:"
+echo "     az logout"
+echo "     az login"
+echo "  2. Apply the initial scheduler configuration:"
+echo "     ./offhours config apply --file runtime.yaml --execute"
+echo "  3. Apply the initial schedule:"
+echo "     ./offhours schedule apply --file business-hours.yaml --execute"

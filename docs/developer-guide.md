@@ -19,7 +19,7 @@ No estado atual, o runtime executa acoes reais para:
 
 ## 2. Mapa Mental da Solucao
 
-Pense na solucao em 4 camadas:
+Pense na solucao em 5 camadas:
 
 1. `function/`
    Host da Azure Function.
@@ -28,7 +28,12 @@ Pense na solucao em 4 camadas:
 3. `infra/bicep/`
    Infraestrutura e app settings.
 4. `scripts/`
-   Automacao de deploy, bootstrap e publish.
+   Automacao de deploy e publish.
+
+Para operacao repo-local, existe tambem:
+
+5. `offhours_cli/`
+   Wrapper para `./offhours`.
 
 Fluxo de runtime:
 
@@ -84,6 +89,8 @@ Subpastas:
   Monta o relatorio estruturado final do ciclo.
 - `src/scheduler/`
   Modelos, engine e service.
+- `src/offhours_cli/`
+  CLI repo-local para operacao de `config`, `schedule` e `state`.
 
 ### `infra/bicep/`, `scripts/` e `tests/`
 
@@ -104,7 +111,15 @@ Fluxo correto:
 1. editar em `src/`
 2. rodar testes
 3. montar bundle com `scripts/prepare_function_app_publish.sh`
-4. publicar a Function
+4. gerar o zip com `scripts/build_function_app_package.sh`
+5. publicar a Function com `az functionapp deployment source config-zip --build-remote true`
+6. sincronizar os triggers
+7. confirmar que `OffHoursTimer` foi registrado
+
+Observacao:
+
+- o wrapper atual garante registro da funcao antes de concluir
+- isso nao significa necessariamente host totalmente aquecido no mesmo instante
 
 ## 5. Como o Runtime Sobe
 
@@ -126,7 +141,7 @@ Quando o timer dispara:
 10. monta o relatorio final do ciclo
 11. escreve o resumo final e o JSON estruturado em log
 
-Se voce precisar depurar o bootstrap, este e o melhor ponto de entrada.
+Se voce precisar depurar o startup do runtime, este e o melhor ponto de entrada.
 
 ## 6. O Que Cada Modulo Faz
 
@@ -169,6 +184,19 @@ Responsabilidades:
 - montar `GlobalSchedulerConfig`
 
 Se mudar o schema das tabelas, este arquivo quase sempre sera impactado.
+
+### `src/persistence/table_entities.py`
+
+Camada compartilhada de parse, validacao e serializacao das entidades de tabela.
+
+Responsabilidades:
+
+- validar booleans, datas ISO-8601 e timezones
+- interpretar `Start/Stop`, `Periods` e listas de escopo
+- montar payload normalizado para CLI e runtime
+- evitar divergencia entre o que a CLI valida e o que o runtime consome
+
+Se a mudanca envolver schema, formato declarativo da CLI ou normalizacao de entidades, este arquivo deve ser o primeiro ponto de edicao.
 
 ### `src/persistence/state_store.py`
 
@@ -271,6 +299,35 @@ Se entrar novo recurso, voce provavelmente vai:
 3. ajustar discovery
 4. adicionar testes
 
+### `src/offhours_cli/`
+
+Implementa a CLI repo-local.
+
+Arquivos principais:
+
+- `src/offhours_cli/main.py`
+  Parser `argparse` e dispatch dos comandos operacionais.
+- `src/offhours_cli/storage.py`
+  Resolucao de `DefaultAzureCredential`, Table Service e nomes das tabelas.
+- `src/offhours_cli/files.py`
+  Leitura declarativa de YAML/JSON.
+- `src/offhours_cli/formatting.py`
+  Renderizacao em `table`, `json` e `yaml`.
+- `offhours`
+  Wrapper shell curto que carrega `.offhours.env` automaticamente antes de chamar `python3 -m offhours_cli`.
+
+Regra importante:
+
+- a CLI nao deve duplicar validacao de entidade em paralelo ao runtime
+- sempre que possivel, reaproveite `src/persistence/table_entities.py`
+- o escopo da CLI deve continuar simples: `config`, `schedule` e `state`
+
+Fluxo esperado:
+
+- o deploy recomendado grava `.offhours.env` na raiz do repositorio
+- o wrapper `./offhours` carrega esse arquivo automaticamente
+- o operador normalmente so precisa fazer `az login` antes de usar a CLI
+
 ## 7. Como Fazer Alteracoes Comuns
 
 ### Mudar a regra de horario
@@ -285,10 +342,13 @@ Arquivos provaveis:
 
 Arquivos provaveis:
 
+- `src/persistence/table_entities.py`
 - `src/persistence/config_store.py`
+- `src/offhours_cli/main.py`
 - `docs/architecture.md`
 - `README.md`
 - `tests/test_config_store.py`
+- `tests/test_offhours_cli.py`
 
 ### Mudar o comportamento de retencao
 
@@ -348,6 +408,12 @@ pip-audit --local --progress-spinner off
 ./scripts/prepare_function_app_publish.sh
 ```
 
+### Gerar zip de publish
+
+```bash
+./scripts/build_function_app_package.sh /tmp/offhours-function.zip
+```
+
 ### Rodar localmente
 
 ```bash
@@ -359,8 +425,7 @@ func start
 ### Fazer deploy completo
 
 ```bash
-./scripts/deploy_scheduler.sh \
-  --parameters-file infra/bicep/main.parameters.json
+./scripts/deploy_scheduler.sh
 ```
 
 ## 9. Armadilhas Comuns
@@ -375,6 +440,7 @@ Regra:
 
 - edite em `src/`
 - use `prepare_function_app_publish.sh` para sincronizar
+- use `build_function_app_package.sh` quando quiser inspecionar o pacote final que sera publicado
 
 ### 2. Mudar Bicep sem alinhar o runtime
 

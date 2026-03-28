@@ -102,7 +102,6 @@ O Bicep cria a storage account, as tabelas e a Function App.
 
 No fluxo padrao de deploy, os inputs principais sao:
 
-- `resourceGroupName`
 - `location`
 - `namePrefix`
 - `subscriptionIds`
@@ -110,7 +109,13 @@ No fluxo padrao de deploy, os inputs principais sao:
 - `excludeSubscriptionIds`
 - `targetResourceLocations`
 
-Input opcional recomendado para operacao do time:
+Input opcional util:
+
+- `resourceGroupName`
+
+No wrapper recomendado de deploy, se `resourceGroupName` vier vazio no arquivo de parametros, o script gera automaticamente `rg-<namePrefix>-<suffix>` antes do deployment.
+
+Input obrigatorio para operacao humana via CLI:
 
 - `tableOperatorsGroupObjectId`
 
@@ -124,7 +129,13 @@ Com isso, o template gera automaticamente os nomes de:
 
 As tabelas usam os nomes default do template, sem necessidade de informar no `parameters`.
 
-Quando `tableOperatorsGroupObjectId` e informado, o template tambem atribui `Storage Table Data Contributor` na Storage Account para esse grupo Microsoft Entra.
+Esse parametro deve apontar para um grupo Microsoft Entra que contenha os usuarios que vao operar `./offhours`.
+Quando informado, o template atribui `Storage Table Data Contributor` na Storage Account para esse grupo Microsoft Entra.
+
+Sem esse grupo:
+
+- a Function continua funcionando
+- mas operadores humanos nao conseguem gravar nas tabelas com a CLI usando Microsoft Entra ID
 
 Uso de `targetResourceLocations`:
 
@@ -147,21 +158,12 @@ Modelos de uso:
 - enterprise: `managementGroupIds` com exclusoes pontuais em `excludeSubscriptionIds`
 - misto: uniao de subscriptions explicitas com subscriptions herdadas dos management groups
 
-Para primeira carga operacional, o repositorio tambem disponibiliza um bootstrap padrao via:
+No desenho atual, o deploy cria a infra e publica a Function, mas a configuracao operacional inicial passa a ser aplicada pela CLI repo-local.
+
+O wrapper recomendado de deploy e:
 
 ```bash
-./scripts/bootstrap_scheduler_tables.sh --resource-group <rg> --storage-account <account>
-```
-
-O bootstrap cria uma configuracao global com `DRY_RUN=false` e um schedule `business-hours` (`08:00-18:00`, segunda a sexta) apenas se essas entidades ainda nao existirem.
-
-No desenho atual, esse bootstrap usa Microsoft Entra ID com `az storage entity ... --auth-mode login`, nao shared key.
-Por isso, quem executa o bootstrap precisa ter `Storage Table Data Contributor` na Storage Account do scheduler.
-
-Na operacao recomendada do repositorio, esse bootstrap e chamado automaticamente por:
-
-```bash
-./scripts/deploy_scheduler.sh --parameters-file infra/bicep/main.parameters.json
+./scripts/deploy_scheduler.sh
 ```
 
 Esse wrapper executa um preflight antes do deploy:
@@ -172,8 +174,20 @@ Esse wrapper executa um preflight antes do deploy:
 - valida acesso as subscriptions efetivas do escopo resolvido
 - executa `az deployment sub validate` antes do create
 
-Depois disso, ele executa o deploy da infra, aplica o bootstrap das tabelas e publica a Function App no final.
-No estado atual, esse publish usa `func azure functionapp publish --python --build remote`.
+Depois disso, ele executa o deploy da infra e publica a Function App no final.
+No estado atual, o publish monta um zip explicito do diretório `function/`, usa `az functionapp deployment source config-zip --build-remote true`, sincroniza os triggers e confirma que `OffHoursTimer` foi registrado antes de concluir.
+No fim, o wrapper tambem grava `.offhours.env` para a CLI local e mostra os comandos recomendados de seed inicial.
+
+Depois do deploy, o seed inicial esperado e:
+
+```bash
+az logout
+az login
+./offhours config apply --file runtime.yaml --execute
+./offhours schedule apply --file business-hours.yaml --execute
+```
+
+O `az logout` / `az login` acima e especialmente util quando o deploy acabou de criar RBAC de tabelas para operadores humanos.
 
 Observacao importante:
 
@@ -195,7 +209,7 @@ Por padrao, o deploy define `TIMER_SCHEDULE=0 */15 * * * *`, ou seja, uma execuc
 
 Cada disparo representa um ciclo completo de avaliacao.
 
-### Etapa 3. Bootstrap do runtime
+### Etapa 3. Startup do runtime
 
 No inicio do ciclo:
 
@@ -545,11 +559,11 @@ Essas permissoes cobrem:
 
 ### Permissoes para operadores humanos
 
-Para evitar erro de acesso ao abrir entidades das tabelas pelo Portal com Microsoft Entra ID, o deploy aceita um grupo Entra opcional:
+Para operacao humana da CLI e acesso as tabelas com Microsoft Entra ID, o deploy precisa de um grupo Entra:
 
 - `tableOperatorsGroupObjectId`
 
-Se informado, o template cria na Storage Account a role:
+Com esse parametro, o template cria na Storage Account a role:
 
 - `Storage Table Data Contributor`
 
@@ -557,11 +571,12 @@ Escopo:
 
 - Storage Account do scheduler
 
-Uso recomendado:
+Modelos recomendados:
 
 - criar um grupo como `azure-offhours-operators`
 - adicionar as pessoas do time nesse grupo
 - informar o `objectId` do grupo no deploy
+- ou reaproveitar um grupo Microsoft Entra ja existente que contenha os operadores da solucao
 
 ### Acesso as tabelas
 

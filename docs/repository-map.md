@@ -104,24 +104,24 @@ Arquivos principais:
 - `infra/bicep/modules/subscriptionRoles.bicep`
   Atribui RBAC no escopo tecnico efetivo.
 - `infra/bicep/main.parameters.example.json`
-  Exemplo de parametros.
+  Exemplo mais completo de parametros.
 - `infra/bicep/main.parameters.json`
-  Parametros reais do ambiente local.
+  Parametros reais do ambiente local. Se `resourceGroupName` ficar vazio, o wrapper gera um RG automaticamente a partir de `namePrefix`.
 - `infra/bicep/main.json`
   ARM compilado.
 
 ### `scripts/`
 
-Automacao de deploy, bootstrap e publish.
+Automacao de deploy e publish.
 
 Arquivos principais:
 
 - `scripts/deploy_scheduler.sh`
-  Wrapper recomendado de deploy.
-- `scripts/bootstrap_scheduler_tables.sh`
-  Seed default das tabelas.
+  Wrapper recomendado de deploy, publish, sync de triggers, geracao opcional do RG e orientacoes finais de seed operacional.
 - `scripts/prepare_function_app_publish.sh`
-  Copia os modulos de `src/` para `function/`.
+  Copia os modulos de `src/` para `function/` e limpa artefatos antigos.
+- `scripts/build_function_app_package.sh`
+  Empacota o diretório `function/` em um zip deterministico para publish.
 
 ### `tests/`
 
@@ -163,7 +163,7 @@ Se a mudanca for:
 - deploy e app settings:
   edite `infra/bicep/` e `scripts/deploy_scheduler.sh`
 - bundle de publish:
-  edite `scripts/prepare_function_app_publish.sh`
+  edite `scripts/prepare_function_app_publish.sh` e `scripts/build_function_app_package.sh`
 - documentacao:
   edite `docs/` e `README.md`
 
@@ -173,6 +173,7 @@ Se voce for alterar o comportamento do scheduler:
 
 1. edite o codigo em `src/`
 2. atualize os testes em `tests/`
-3. rode `scripts/prepare_function_app_publish.sh` apenas quando precisar montar o bundle de publish
+3. rode `scripts/prepare_function_app_publish.sh` quando precisar sincronizar o host de publish
+4. rode `scripts/build_function_app_package.sh` quando precisar inspecionar ou publicar o zip final
 
 Essa separacao evita duplicacao de codigo e deixa claro o que e host da Function e o que e codigo fonte da aplicacao.

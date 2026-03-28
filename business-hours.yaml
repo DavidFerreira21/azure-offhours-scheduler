@@ -1,0 +1,10 @@
+PartitionKey: SCHEDULE
+RowKey: business-hours
+Periods:
+  - start: "18:00"
+    stop: "21:00"
+SkipDays:
+  - saturday
+  - sunday
+Enabled: true
+Version: "1"

@@ -57,8 +57,7 @@ Campos mínimos de auditoria esperados hoje:
 O caminho recomendado de deploy é:
 
 ```bash
-./scripts/deploy_scheduler.sh \
-  --parameters-file infra/bicep/main.parameters.json
+./scripts/deploy_scheduler.sh
 ```
 
 Isso é especialmente importante quando o escopo usa:
@@ -67,6 +66,7 @@ Isso é especialmente importante quando o escopo usa:
 - `excludeSubscriptionIds`
 
 Porque o wrapper resolve o escopo efetivo antes do deploy.
+Ele tambem preenche `resourceGroupName` automaticamente quando o arquivo de parametros deixa esse valor vazio.
 
 ## Política de Dependências
 

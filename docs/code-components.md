@@ -269,12 +269,11 @@ Responsabilidades:
 
 ## 10. Scripts Operacionais
 
-Os scripts nao fazem parte do runtime principal, mas sustentam deploy, bootstrap e publish.
+Os scripts nao fazem parte do runtime principal, mas sustentam deploy e publish.
 
 Arquivos:
 
 - `scripts/deploy_scheduler.sh`
-- `scripts/bootstrap_scheduler_tables.sh`
 - `scripts/prepare_function_app_publish.sh`
 
 ### `scripts/deploy_scheduler.sh`
@@ -284,18 +283,14 @@ Responsabilidades:
 - validar ferramentas locais
 - validar autenticacao Azure
 - resolver escopo tecnico efetivo
+- gerar `resourceGroupName` automaticamente quando ele vier vazio no parameters file
 - validar o Bicep
 - executar o deploy
-- bootstrap das tabelas
 - preparar o bundle da Function
 - publicar a Function
-
-### `scripts/bootstrap_scheduler_tables.sh`
-
-Responsabilidades:
-
-- criar a configuracao global default se ela nao existir
-- criar o schedule `business-hours` se ele nao existir
+- sincronizar triggers e confirmar registro de `OffHoursTimer`
+- escrever `.offhours.env` para a CLI local
+- mostrar os proximos comandos operacionais recomendados no final do deploy
 
 ### `scripts/prepare_function_app_publish.sh`
 
@@ -304,6 +299,14 @@ Responsabilidades:
 - limpar artefatos antigos do host
 - copiar `src/config`, `src/discovery`, `src/handlers`, `src/persistence`, `src/reporting` e `src/scheduler` para `function/`
 - deixar o bundle pronto para publish
+
+### `scripts/build_function_app_package.sh`
+
+Responsabilidades:
+
+- empacotar o diretório `function/` em um zip deterministico
+- incluir `host.json`, `requirements.txt`, `OffHoursTimer/` e os módulos de runtime
+- excluir `__pycache__`
 
 ## 11. Infraestrutura
 

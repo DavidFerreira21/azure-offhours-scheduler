@@ -3,4 +3,5 @@ azure-identity
 azure-mgmt-resourcegraph
 azure-mgmt-compute
 azure-data-tables
+PyYAML>=6.0,<7
 PyJWT>=2.12.0,<3

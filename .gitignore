@@ -14,3 +14,4 @@ function/persistence/
 function/reporting/
 function/scheduler/
 infra/bicep/main.parameters.json
+.offhours.env

@@ -64,9 +64,6 @@ param scheduleTableName string = 'OffHoursSchedulerSchedules'
 @description('Azure Table Storage table name used for scheduler state.')
 param stateTableName string = 'OffHoursSchedulerState'
 
-@description('When true, seed default configuration and schedule entities during deployment.')
-param bootstrapDefaults bool = true
-
 @description('Optional Microsoft Entra group object ID that will receive Storage Table Data Contributor on the scheduler storage account.')
 param tableOperatorsGroupObjectId string = ''
 
@@ -106,7 +103,6 @@ module functionStack './modules/functionApp.bicep' = {
     configTableName: configTableName
     scheduleTableName: scheduleTableName
     stateTableName: stateTableName
-    bootstrapDefaults: bootstrapDefaults
     tableOperatorsGroupObjectId: tableOperatorsGroupObjectId
   }
 }

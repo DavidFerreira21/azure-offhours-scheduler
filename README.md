@@ -1,6 +1,5 @@
 # Azure OffHours Scheduler
 
-![CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.12-blue.svg)
 
@@ -68,9 +67,35 @@ Setup:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp infra/bicep/main.parameters.example.json infra/bicep/main.parameters.json
 az login
 ```
+
+Use `infra/bicep/main.parameters.json` como arquivo principal de deploy.
+Se precisar consultar opções mais avançadas do template, veja `infra/bicep/main.parameters.example.json`.
+Se `resourceGroupName` ficar vazio, o wrapper de deploy gera automaticamente `rg-<namePrefix>-<suffix>`.
+
+Parâmetros mínimos:
+
+- `location`
+- `namePrefix`
+- `subscriptionIds` ou `managementGroupIds`
+
+Parâmetro opcional útil:
+
+- `resourceGroupName`
+  Se preenchido, força um nome fixo para o resource group. Se vazio, o deploy gera um nome automaticamente a partir de `namePrefix`.
+
+Parâmetro obrigatório para operação via CLI:
+
+- `tableOperatorsGroupObjectId`
+  Concede `Storage Table Data Contributor` ao grupo Microsoft Entra que vai operar a CLI e as tabelas.
+
+Sem esse grupo, a Function continua funcionando, mas operadores humanos não conseguem aplicar `config` e `schedule` com `./offhours` usando Microsoft Entra ID.
+
+Modelos recomendados:
+
+- usar um grupo Microsoft Entra já existente que contenha os operadores da solução
+- criar um grupo novo, por exemplo `azure-offhours-operators`, adicionar os usuários e informar o `objectId` no deploy
 
 Deploy:
 
@@ -81,54 +106,145 @@ make deploy
 Ou:
 
 ```bash
-./scripts/deploy_scheduler.sh --parameters-file infra/bicep/main.parameters.json
+./scripts/deploy_scheduler.sh
 ```
 
-Parâmetros mínimos:
+O fluxo recomendado já publica a Function, sincroniza os triggers, registra `OffHoursTimer` no Azure e grava `.offhours.env` para a CLI local.
 
-- `resourceGroupName`
-- `location`
-- `namePrefix`
-- `subscriptionIds` ou `managementGroupIds`
-- `tableOperatorsGroupObjectId`
+Seed inicial recomendado pela CLI:
 
-## Exemplo de Uso
+```bash
+az logout
+az login
+./offhours config apply --file runtime.yaml --execute
+./offhours schedule apply --file business-hours.yaml --execute
+```
 
-Tag em uma VM:
+- `az logout` / `az login`
+  Se o deploy acabou de criar RBAC de tabelas para o grupo operador, pode ser necessario renovar as credenciais locais antes do primeiro `apply`.
+- `config apply --file runtime.yaml --execute`
+  Cria ou atualiza a configuracao global do scheduler na tabela `OffHoursSchedulerConfig`, incluindo comportamento como `DRY_RUN`, timezone padrao, chave da tag de schedule e regras de retain.
+- `schedule apply --file business-hours.yaml --execute`
+  Cria ou atualiza o schedule `business-hours` na tabela `OffHoursSchedulerSchedules`, com a janela operacional que sera referenciada pelas tags dos recursos.
+
+
+
+## CLI Operacional
+
+A operação diária da solução pode ser feita pela CLI local do repositório.
+O escopo dela foi mantido simples:
+
+- criar, atualizar e excluir schedules
+- consultar e alterar a configuração global
+- consultar e excluir registros de state
+- disparar manualmente a Function do scheduler
+
+```bash
+./offhours --help
+```
+
+A CLI usa `DefaultAzureCredential` por padrão.
+A implicação prática é que os operadores precisam ter `Storage Table Data Contributor` na storage do scheduler, normalmente via `tableOperatorsGroupObjectId` no deploy.
+
+Uso recomendado no dia a dia:
+
+```bash
+az login
+./offhours state list
+```
+
+No fluxo recomendado, `./scripts/deploy_scheduler.sh` grava automaticamente `.offhours.env` na raiz do repositório.
+O wrapper `./offhours` lê esse arquivo sozinho, então você não precisa exportar `OFFHOURS_TABLE_SERVICE_URI` manualmente depois do deploy.
+
+Resolução de contexto da CLI:
+
+1. se `OFFHOURS_TABLE_SERVICE_URI` já estiver definida no shell, ela é usada
+2. caso contrário, `./offhours` tenta carregar `.offhours.env`
+3. esse arquivo é gerado automaticamente no fim do deploy recomendado
+
+Na prática, depois de um deploy bem-sucedido, o fluxo esperado é:
+
+```bash
+az login
+./offhours ...
+```
+
+Validação rápida pós-deploy:
+
+```bash
+./offhours state list
+./offhours function trigger
+./offhours state list
+```
+
+Exemplos de operação:
+
+```bash
+./offhours config get
+./offhours config apply --file runtime.yaml
+./offhours schedule list
+./offhours schedule get business-hours
+./offhours schedule apply --file business-hours.yaml
+./offhours schedule delete business-hours
+./offhours state get \
+  --resource-id /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Compute/virtualMachines/<vm>
+./offhours state delete \
+  --resource-id /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Compute/virtualMachines/<vm>
+./offhours function trigger
+```
+
+Fluxo seguro para mudanças:
+
+1. criar um arquivo YAML ou JSON com a entidade desejada
+2. executar `config apply`, `schedule apply`, `schedule delete` ou `state delete` sem `--execute` para preview
+3. repetir com `--execute` para gravar ou excluir
+
+Arquivos de referência no repositório:
+
+- `runtime.yaml`
+- `business-hours.yaml`
+
+Exemplo de tag em uma VM:
 
 ```text
 schedule=business-hours
 ```
 
-Exemplo simples de schedule:
+Exemplo de schedule em YAML:
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "business-hours",
-  "Start": "08:00",
-  "Stop": "18:00",
-  "SkipDays": "saturday,sunday",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-19T12:00:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+RowKey: business-hours
+Periods:
+  - start: "08:00"
+    stop: "12:00"
+  - start: "13:00"
+    stop: "18:00"
+SkipDays:
+  - saturday
+  - sunday
+Enabled: true
+Version: "2"
 ```
 
-Formato preferido para janelas mais ricas:
+Exemplo de config global em YAML:
 
-```json
-{
-  "PartitionKey": "SCHEDULE",
-  "RowKey": "office-hours-split",
-  "Periods": "[{\"start\":\"08:00\",\"stop\":\"12:00\"},{\"start\":\"13:00\",\"stop\":\"18:00\"}]",
-  "Enabled": true,
-  "Version": "1",
-  "UpdatedAtUtc": "2026-03-19T12:00:00Z",
-  "UpdatedBy": "ops@example.com"
-}
+```yaml
+PartitionKey: GLOBAL
+RowKey: runtime
+DRY_RUN: false
+DEFAULT_TIMEZONE: America/Sao_Paulo
+SCHEDULE_TAG_KEY: schedule
+RETAIN_RUNNING: true
+RETAIN_STOPPED: true
+Version: "1"
 ```
+
+Observação:
+
+- `Version` deve estar no arquivo
+- para operação no dia a dia, prefira YAML com `./offhours config apply` e `./offhours schedule apply`
+- a CLI preenche os campos de auditoria no momento do `apply`
+- exemplos JSON de entidades continuam em `docs/examples.md` e `docs/architecture.md` como referência de schema
 
 ## Casos de Uso
 
@@ -144,7 +260,6 @@ Formato preferido para janelas mais ricas:
 - Retenção para respeitar override manual do operador
 - Filtro regional com `targetResourceLocations`
 - Timer técnico configurável com `TIMER_SCHEDULE`
-- Bootstrap padrão no primeiro deploy
 - Fluxo de deploy limpo com Bicep
 
 ## Observabilidade
@@ -175,14 +290,6 @@ Exemplo de formato do relatório:
   "resources": []
 }
 ```
-
-## Objetivos de Design
-
-- Permitir mudanças operacionais sem depender de redeploy
-- Automatizar com segurança antes de automatizar com agressividade
-- Separar configuração técnica de runtime das regras do scheduler
-- Manter escopo explícito, auditável e governável
-- Entregar observabilidade útil sem adicionar infraestrutura extra
 
 ## Documentação
 

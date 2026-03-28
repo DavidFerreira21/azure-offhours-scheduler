@@ -12,17 +12,27 @@ Use:
 .\.venv\Scripts\Activate.ps1
 ```
 
-## 2. `func: command not found`
-
-Azure Functions Core Tools nao esta instalado no ambiente atual.
+## 2. O deploy terminou, mas a Function nao apareceu
 
 Valide:
 
 ```bash
-func --version
+az functionapp function list \
+  --resource-group <rg> \
+  --name <function-app>
 ```
 
-Se necessario, instale o pacote correspondente ao seu sistema operacional.
+No fluxo atual, o deploy recomendado:
+
+- prepara o bundle com `./scripts/prepare_function_app_publish.sh`
+- monta um zip explicito com `./scripts/build_function_app_package.sh`
+- publica com `az functionapp deployment source config-zip --build-remote true`
+- sincroniza os triggers antes de concluir
+- confirma que `OffHoursTimer` foi registrado no Azure
+
+Observacao:
+
+- isso nao garante necessariamente que o host ja esteja totalmente aquecido no mesmo instante
 
 ## 3. `Connection refused (127.0.0.1:10000)`
 
@@ -38,7 +48,24 @@ Observacao:
 - em Azure, o deploy Bicep usa identidade gerenciada para o host da Function e para o acesso da aplicacao as tabelas
 - `SCHEDULER_STORAGE_CONNECTION_STRING` permanece apenas como fallback para desenvolvimento local
 
-## 4. `No module named 'config'`
+## 4. `UpdatedBy could not be resolved`
+
+A CLI nao conseguiu descobrir quem esta fazendo o `apply`.
+
+Use uma destas opcoes:
+
+```bash
+export OFFHOURS_UPDATED_BY=seu-email@exemplo.com
+```
+
+Ou:
+
+```bash
+./offhours config apply --file runtime.yaml --updated-by seu-email@exemplo.com
+./offhours schedule apply --file business-hours.yaml --updated-by seu-email@exemplo.com
+```
+
+## 5. `No module named 'config'`
 
 No contexto atual da estrutura do projeto, esse erro normalmente indica que o bundle da Function nao foi preparado antes do publish.
 
@@ -50,7 +77,7 @@ Execute:
 
 Depois publique novamente.
 
-## 5. O deploy funciona, mas o Portal nao deixa ler as tabelas
+## 6. O deploy funciona, mas o Portal nao deixa ler as tabelas
 
 Normalmente isso significa falta de RBAC de data plane para o usuario humano.
 
@@ -62,9 +89,24 @@ E se esse grupo recebeu:
 
 - `Storage Table Data Contributor`
 
-Esse mesmo requisito vale para o bootstrap manual das tabelas, que agora usa `az storage entity ... --auth-mode login` em vez de shared key.
+Esse acesso e relevante para operadores humanos usando a CLI contra as tabelas.
+No desenho atual, trate `tableOperatorsGroupObjectId` como obrigatorio para operacao humana via `./offhours`.
 
-## 6. A Function sobe, mas nao acha recursos
+Modelos validos:
+
+- usar um grupo Microsoft Entra ja existente com os operadores
+- criar um grupo novo para a solucao e informar o `objectId` no deploy
+
+Se o grupo e o RBAC acabaram de ser criados no deploy, tambem pode ser necessario renovar as credenciais locais antes do primeiro `apply`:
+
+```bash
+az logout
+az login
+```
+
+Mesmo assim, pode haver alguns minutos de propagacao no data plane da storage.
+
+## 7. A Function sobe, mas nao acha recursos
 
 Checklist:
 
@@ -74,13 +116,12 @@ Checklist:
 - o nome da tag corresponde a `SCHEDULE_TAG_KEY`
 - a identidade da Function recebeu RBAC nas subscriptions efetivas
 
-## 7. O deploy com management groups nao trouxe as subscriptions esperadas
+## 8. O deploy com management groups nao trouxe as subscriptions esperadas
 
 Use o wrapper:
 
 ```bash
-./scripts/deploy_scheduler.sh \
-  --parameters-file infra/bicep/main.parameters.json
+./scripts/deploy_scheduler.sh
 ```
 
 Nao confie em `az deployment sub create` direto quando o escopo usa:
@@ -90,7 +131,22 @@ Nao confie em `az deployment sub create` direto quando o escopo usa:
 
 O wrapper resolve o escopo tecnico efetivo antes do deploy.
 
-## 8. O scheduler nao executa nada
+## 9. `./offhours state list` mostra `(empty)`
+
+Isso pode ser normal quando:
+
+- ainda nao houve nenhum ciclo do scheduler
+- a Function ainda nao foi disparada manualmente
+- nenhum recurso exigiu persistencia de state
+
+Valide:
+
+```bash
+./offhours function trigger
+./offhours state list
+```
+
+## 10. O scheduler nao executa nada
 
 Verifique:
 
@@ -101,7 +157,7 @@ Verifique:
 - o dia atual pode estar em `SkipDays`
 - o recurso pode estar fora do escopo include/exclude
 
-## 9. Mudanca no codigo nao apareceu no ambiente publicado
+## 11. Mudanca no codigo nao apareceu no ambiente publicado
 
 Checklist:
 
@@ -109,7 +165,7 @@ Checklist:
 - `./scripts/prepare_function_app_publish.sh` foi executado
 - a Function foi publicada novamente
 
-## 10. Como depurar o bootstrap do runtime
+## 12. Como depurar o startup do runtime
 
 Comece por:
 
@@ -123,7 +179,7 @@ E valide em ordem:
 4. discovery
 5. service
 
-## 11. A Function falha depois de eu editar a tabela manualmente
+## 13. A Function falha depois de eu editar a tabela manualmente
 
 Um caso comum e erro de tipo em campo booleano, por exemplo:
 

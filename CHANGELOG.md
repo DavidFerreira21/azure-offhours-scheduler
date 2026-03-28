@@ -4,6 +4,51 @@ All notable changes to this project should be documented in this file.
 
 The format is inspired by Keep a Changelog.
 
+## [1.1.0] - 2026-03-27
+
+### Added
+
+- Repository-local operational CLI through `./offhours` and `python -m offhours_cli`
+- CLI commands for:
+  - `config get|apply`
+  - `schedule list|get|apply|delete`
+  - `state list|get|delete`
+  - `function trigger`
+- Shared table-entity normalization in `src/persistence/table_entities.py` to keep CLI and runtime aligned
+- Local example files for day-2 operations:
+  - `runtime.yaml`
+  - `business-hours.yaml`
+- Deterministic Function App zip packaging through `scripts/build_function_app_package.sh`
+- Post-deploy `.offhours.env` generation for automatic CLI context loading
+
+### Changed
+
+- Deploy wrapper now defaults to `infra/bicep/main.parameters.json`
+- Deploy wrapper can auto-generate `resourceGroupName` as `rg-<namePrefix>-<suffix>` when the parameter is left empty
+- Deploy wrapper now:
+  - validates subscription-scope deployment by default
+  - prints clearer progress messages for long Azure steps
+  - writes operational next steps at the end of the run
+- Function publish flow moved to explicit zip deploy with remote build, trigger sync, and function registration checks
+- Documentation now treats `tableOperatorsGroupObjectId` as a practical requirement for human CLI operators using Microsoft Entra ID
+- Main and example parameter files were reorganized:
+  - `main.parameters.json` for the common path
+  - `main.parameters.example.json` for broader template options
+- READMEs and detailed docs were aligned to the CLI-first operational model, YAML examples, post-deploy seed steps, and Azure RBAC refresh guidance
+
+### Removed
+
+- Automatic bootstrap of default config and schedule during deploy
+- `scripts/bootstrap_scheduler_tables.sh`
+- Legacy CLI aliases `show` and `set`
+
+### Fixed
+
+- Function publish reliability by replacing the previous publish path with explicit bundle preparation and zip deployment
+- Trigger synchronization resilience with retries during Function publish
+- Storage table operator guidance and deploy outputs so post-deploy CLI usage is clearer
+- Resource naming collisions during repeated deploy/delete cycles by allowing automatic resource group suffix generation
+
 ## [1.0.0] - 2026-03-19
 
 ### Added
