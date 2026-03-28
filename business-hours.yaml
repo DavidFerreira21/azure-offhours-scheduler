@@ -1,8 +1,8 @@
 PartitionKey: SCHEDULE
 RowKey: business-hours
 Periods:
-  - start: "18:00"
-    stop: "21:00"
+  - start: "8:00"
+    stop: "18:00"
 SkipDays:
   - saturday
   - sunday
