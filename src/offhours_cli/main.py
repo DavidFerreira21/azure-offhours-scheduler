@@ -184,7 +184,9 @@ def fetch_function_master_key(*, resource_group: str, function_app_name: str, sl
     try:
         result = subprocess.run(command, check=False, capture_output=True, text=True)
     except FileNotFoundError as error:
-        raise ValueError("Azure CLI could not be found. Install 'az' or run the command from a configured environment.") from error
+        raise ValueError(
+            "Azure CLI could not be found. Install 'az' or run the command from a configured environment."
+        ) from error
 
     if result.returncode != 0:
         error_output = result.stderr.strip() or result.stdout.strip() or "failed to retrieve Function App keys"
@@ -192,7 +194,9 @@ def fetch_function_master_key(*, resource_group: str, function_app_name: str, sl
 
     master_key = result.stdout.strip()
     if not master_key:
-        raise ValueError("Function App master key was empty. Check the Function App name, resource group, and Azure access.")
+        raise ValueError(
+            "Function App master key was empty. Check the Function App name, resource group, and Azure access."
+        )
     return master_key
 
 
@@ -542,7 +546,8 @@ def handle_function_trigger(args) -> int:
 
     if not published_function_names:
         raise ValueError(
-            "No published functions were found in the target Function App. Publish the app first or pass --function-name explicitly."
+            "No published functions were found in the target Function App. "
+            "Publish the app first or pass --function-name explicitly."
         )
 
     payload = invoke_function_trigger(

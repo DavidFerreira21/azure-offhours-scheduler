@@ -368,7 +368,14 @@ def test_removed_show_alias_is_rejected() -> None:
     parser = build_parser()
 
     with pytest.raises(SystemExit):
-        parser.parse_args(["state", "show", "--resource-id", "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm"])
+        parser.parse_args(
+            [
+                "state",
+                "show",
+                "--resource-id",
+                "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm",
+            ]
+        )
 
 
 class FakeUrlOpenResponse:
