@@ -3,9 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
+import shutil
+import subprocess  # nosec B404
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Sequence
@@ -131,18 +133,29 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def azure_cli_executable() -> str:
+    executable = shutil.which("az")
+    if executable:
+        return executable
+    raise FileNotFoundError("Azure CLI executable 'az' was not found in PATH.")
+
+
+def run_azure_cli(arguments: Sequence[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [azure_cli_executable(), *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+    )  # nosec B603
+
+
 def resolve_updated_by(explicit_value: str) -> str:
     candidate = explicit_value.strip() or os.getenv("OFFHOURS_UPDATED_BY", "").strip()
     if candidate:
         return candidate
 
     try:
-        result = subprocess.run(
-            ["az", "account", "show", "--query", "user.name", "-o", "tsv"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        result = run_azure_cli(["account", "show", "--query", "user.name", "-o", "tsv"])
     except FileNotFoundError as error:
         raise ValueError("UpdatedBy could not be resolved. Use --updated-by or set OFFHOURS_UPDATED_BY.") from error
 
@@ -163,9 +176,22 @@ def resolve_function_name(explicit_value: str) -> str:
     return explicit_value.strip() or os.getenv("OFFHOURS_FUNCTION_NAME", "").strip() or "OffHoursTimer"
 
 
+def validate_function_admin_url(url: str) -> str:
+    parsed_url = urllib.parse.urlparse(url)
+    host_name = (parsed_url.hostname or "").lower()
+
+    if parsed_url.scheme != "https":
+        raise ValueError("Function trigger URL must use https.")
+    if not host_name.endswith(".azurewebsites.net"):
+        raise ValueError("Function trigger URL must target an Azure Function App hostname.")
+    if not parsed_url.path.startswith("/admin/functions/"):
+        raise ValueError("Function trigger URL must target the Function admin endpoint.")
+
+    return url
+
+
 def fetch_function_master_key(*, resource_group: str, function_app_name: str, slot: str = "") -> str:
     command = [
-        "az",
         "functionapp",
         "keys",
         "list",
@@ -182,7 +208,7 @@ def fetch_function_master_key(*, resource_group: str, function_app_name: str, sl
         command.extend(["--slot", slot])
 
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = run_azure_cli(command)
     except FileNotFoundError as error:
         raise ValueError(
             "Azure CLI could not be found. Install 'az' or run the command from a configured environment."
@@ -202,7 +228,6 @@ def fetch_function_master_key(*, resource_group: str, function_app_name: str, sl
 
 def fetch_published_function_names(*, resource_group: str, function_app_name: str) -> list[str]:
     command = [
-        "az",
         "functionapp",
         "function",
         "list",
@@ -217,7 +242,7 @@ def fetch_published_function_names(*, resource_group: str, function_app_name: st
     ]
 
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = run_azure_cli(command)
     except FileNotFoundError:
         return []
 
@@ -250,7 +275,7 @@ def invoke_function_trigger(
         slot=slot,
     )
     host_name = f"{function_app_name}-{slot}.azurewebsites.net" if slot else f"{function_app_name}.azurewebsites.net"
-    url = f"https://{host_name}/admin/functions/{function_name}"
+    url = validate_function_admin_url(f"https://{host_name}/admin/functions/{function_name}")
     request_payload = {"input": input_payload} if input_payload else {}
     request = urllib.request.Request(
         url,
@@ -263,7 +288,8 @@ def invoke_function_trigger(
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        # The URL is constrained to the Azure Functions admin endpoint.
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             status_code = getattr(response, "status", None)
             if status_code is None:
                 status_code = response.getcode()
